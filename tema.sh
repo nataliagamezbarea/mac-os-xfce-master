@@ -104,13 +104,16 @@ tema_fuentes() {
         sudo mkdir -p /usr/share/fonts/Inter
         sudo find /tmp/inter -name "*.ttf" -exec cp {} /usr/share/fonts/Inter/ \;
     )
-    sudo fc-cache -f -v
+    # fc-cache en silencio y con el HOME del usuario: con "-v" escupe veinte
+    # lineas de ruido inutil y con sudo se queja de /root/.local/share/fonts
+    # (HOME=/root), que no existe. Lo que importa es que se regenere la cache.
+    sudo env HOME="$HOME" fc-cache -f >/dev/null 2>&1 || true
     mkdir -p ~/.local/share/fonts/MesloLGS
     curl -fL "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular.ttf" -o ~/.local/share/fonts/MesloLGS/MesloLGS_NF_Regular.ttf
     curl -fL "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold.ttf" -o ~/.local/share/fonts/MesloLGS/MesloLGS_NF_Bold.ttf
     curl -fL "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Italic.ttf" -o ~/.local/share/fonts/MesloLGS/MesloLGS_NF_Italic.ttf
     curl -fL "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold%20Italic.ttf" -o ~/.local/share/fonts/MesloLGS/MesloLGS_NF_Bold_Italic.ttf
-    fc-cache -fv
+    fc-cache -f >/dev/null 2>&1 || true
     info "Fuentes instaladas"
 }
 
@@ -405,10 +408,18 @@ asegurar_uno() {
         flock -u 8; exec 8>&-; return 0
     fi
 
-    if [ -n "$conf" ]; then
+    # Si el componente tiene un lanzador propio, se usa ese. Plank lo tiene:
+    # plank-autostart.sh espera a que xfdesktop haya pintado el fondo de
+    # pantalla antes de arrancarlo, porque Plank copia los pixeles que hay detras
+    # para hacerse transparente. Lanzado a pelo copia el escritorio en negro y el
+    # dock sale opaco, y se queda asi hasta reiniciarlo a mano.
+    local wrap="$HOME/.local/bin/$proc-autostart.sh"
+    if [ -z "$conf" ] && [ -x "$wrap" ]; then
+        setsid -f "$wrap" >/dev/null 2>&1 </dev/null &
+    elif [ -n "$conf" ]; then
         setsid "$proc" --config "$conf" --daemon >/dev/null 2>&1 </dev/null &
     else
-        setsid -f "$proc" >/dev/null 2>&1 </dev/null
+        setsid -f "$proc" >/dev/null 2>&1 </dev/null &
     fi
 
     # Margen minimum para que el proceso sea visible en pgrep antes de soltarle

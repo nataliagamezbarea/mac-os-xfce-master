@@ -149,16 +149,64 @@ EOF
     local PLANK_AUTOSTART="$HOME/.local/bin/plank-autostart.sh"
     cat > "$PLANK_AUTOSTART" << 'PLANKEOF'
 #!/bin/bash
-# Plank INMEDIATO - sin esperas, sin logs, sin comprobaciones que bloqueen
-# Lanza plank YA y sale. Cachés/iconos en background si hace falta.
+# Plank, pero solo cuando el fondo de pantalla ya esta pintado.
+#
+# QUE PASABA: Plank no es transparente por configuracion, copia los pixeles que
+# hay detras de el y los vuelve a pintar. Si arranca antes de que xfdesktop
+# haya pintado el wallpaper (que es lo que pasa al iniciar sesion, porque este
+# .desktop es de los primeros) copia un escritorio en negro y el dock sale
+# opaco. No se arregla solo: Plank solo vuelve a copiar el fondo cuando le
+# cambia la propiedad, asi que se quedaba oscuro hasta reiniciar el dock.
+#
+# QUE HACE: espera a que el fondo este puesto y exista en disco (casi siempre
+# es instantaneo, porque las claves viven en xfconf), fuerza un repintado
+# immediate con "xfdesktop --reload" y solo entonces arranca Plank. Ademas, si
+# el fondo estaba mal y hay que aplicarlo, se lanza DESPUES, con lo que Plank
+# ya copia el fondo bueno a la primera.
 
-# Si ya está corriendo, no hacer nada
+[ -n "${DISPLAY:-}" ] || exit 0
+
+# ── el fondo de pantalla esta listo? ────────────────────────────────────────
+# Busca la clave de XFCE para cada monitor real. XFCE 4.16+ la llama
+# "monitor" + <nombre del RandR> (monitoreDP-1-1) y, si no existe, cae a
+# "monitor" + <numero> (monitor0). Se aceptan las dos.
+fondo_listo() {
+    local m pre f et
+    pgrep -x xfdesktop >/dev/null 2>&1 || return 1
+    # Las claves de xfconf ya estaban puestas de antes, asi que por si solas
+    # no dicen nada: lo que tiene que haber ocurrido es que xfdesktop pintase
+    # el fondo. Se espera a que lleve un par de segundos vivo.
+    et=$(ps -o etimes= -C xfdesktop 2>/dev/null | tr -cd "0-9")
+    [ -n "$et" ] && [ "$et" -lt 2 ] && return 1
+    for m in $(xrandr --query 2>/dev/null | awk '/ connected/{print $1}'); do
+        for pre in "monitor$m" "monitor0"; do
+            f=$(xfconf-query -c xfce4-desktop \
+                  -p "/backdrop/screen0/$pre/workspace0/last-image" 2>/dev/null)
+            [ -n "$f" ] && [ -s "$f" ] && return 0
+        done
+    done
+    return 1
+}
+
+# ── 1) si ya hay un dock vivo, no se toca ──────────────────────────────────
 pgrep -x plank >/dev/null 2>&1 && exit 0
 
-# LANZAR PLANK YA
-plank &
+# ── 2) esperar al fondo (tope 12 s; lo normal es 0) ────────────────────────
+i=0
+while [ "$i" -lt 24 ]; do
+    fondo_listo && break
+    sleep 0.5
+    i=$((i + 1))
+done
 
-# Actualizar cachés de iconos EN BACKGROUND (no bloquea plank)
+# ── 3) repintar el escritorio AHORA, para que Plank copie el fondo bueno ───
+xfdesktop --reload >/dev/null 2>&1 || true
+sleep 0.4
+
+# ── 4) ahora si, el dock ────────────────────────────────────────────────────
+plank >/dev/null 2>&1 &
+
+# ── 5) cachés de iconos EN BACKGROUND (no bloquea el dock) ──────────────────
 (
     for t in "$HOME/.local/share/plank/themes/Ventura" "$HOME/.local/share/plank/themes/Transparent"; do
         [ -d "$t" ] && gtk-update-icon-cache -f -t "$t" >/dev/null 2>&1
@@ -189,8 +237,12 @@ EOF
     mkdir -p ~/.config/xfce4
     cat > ~/.config/xfce4/xinitrc << 'XINITEOF'
 #!/bin/sh
-# Arranque temprano de Plank SIN SALTO: espera a que xfwm4 esté listo (máx 10s).
-if [ -n "$DISPLAY" ] && command -v plank >/dev/null 2>&1; then
+# Arranque temprano de Plank. Primero espera a que xfwm4 esté listo (máx 10s) y
+# luego llama a plank-autostart.sh, que es el que espera al fondo de pantalla
+# antes de lanzar el dock. Lanzar plank aquí a pelo era el bug: arrancaba antes
+# de que xfdesktop pintase el wallpaper, copiaba un escritorio en negro y el
+# dock salía opaco al iniciar sesión.
+if [ -n "$DISPLAY" ]; then
     (
         i=0
         while [ "$i" -lt 20 ]; do
@@ -198,7 +250,11 @@ if [ -n "$DISPLAY" ] && command -v plank >/dev/null 2>&1; then
             sleep 0.5
             i=$((i + 1))
         done
-        pgrep -x plank >/dev/null 2>&1 || plank >/dev/null 2>&1 &
+        if [ -x "$HOME/.local/bin/plank-autostart.sh" ]; then
+            "$HOME/.local/bin/plank-autostart.sh" >/dev/null 2>&1 &
+        else
+            command -v plank >/dev/null 2>&1 && plank >/dev/null 2>&1 &
+        fi
     ) &
 fi
 # Continuar con el inicio estándar de la sesión XFCE

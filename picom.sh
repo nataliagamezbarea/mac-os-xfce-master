@@ -1,15 +1,21 @@
 #!/bin/bash
-# picom.sh — compositor único (picom). TODO OPACO, salvo las apps que TÚ elijas.
+# picom.sh — compositor único (picom). Nada se vuelve transparente a la fuerza.
 #
-# Elige qué apps llevan transparencia en la lista de abajo (clase WM_CLASS).
-# Para saber la clase de una app:  xprop WM_CLASS   y clic en su ventana.
-# También puedes añadirlas sin tocar el script, una por línea, en:
+# OJO: aquí NO se usa ningún shader para forzar opacidad. El que había puesto
+# c.a = 1.0 sobre la textura de la ventana, y eso convertía en NEGRO SÓLIDO cada
+# píxel que la app dibujaba transparente (su RGB es 0,0,0). Por eso el icono que
+# arrastras en Nautilus y el diálogo de cerrar sesión salían como un rectángulo
+# negro. No lo reinsertes: no hay forma de forzar alfa=1 sin romper los píxeles
+# transparentes de la propia ventana.
+#
+# Lo correcto es detect-client-opacity = true: picom respeta el alfa que dibuja
+# cada app. Las translúcidas ya lo son por su cuenta y todas las demás se ven
+# opacas sin tocar nada.
+#
+# La lista de abajo es INFORMATIVA: dice qué apps se ven translúcidas y de dónde
+# sale su alfa. Para saber la clase de una app:  xprop WM_CLASS  y clic en su
+# ventana. Para apuntar otra sin tocar el script, una por línea, en:
 #   ~/.config/picom/transparentes.txt
-# Todo lo que NO esté en la lista se fuerza a opaco (Unity, Unity Hub,
-# panel superior, etc.). Después de editar la lista: bash picom.sh
-#
-# Ventanas GTK con decoración propia (_GTK_FRAME_EXTENTS) y menús/notificaciones
-# se dejan tal cual: necesitan su alfa para sombras y esquinas redondeadas.
 
 APPS_TRANSPARENTES=(
     "Xfce4-panel"      # panel superior (se ve el fondo de pantalla)
@@ -25,31 +31,22 @@ source "$DIR/comun.sh"
 
 PICOM_DIR="$HOME/.config/picom"
 PICOM_CONF="$PICOM_DIR/picom.conf"
-PICOM_SHADER="$PICOM_DIR/opaque.glsl"
 PICOM_LISTA="$PICOM_DIR/transparentes.txt"
 
-# Construye la condición de picom a partir de la lista (script + archivo)
-picom_condicion() {
-    local clases=("${APPS_TRANSPARENTES[@]}") linea
+# Lista de apps que se ven translúcidas (script + archivo del usuario).
+# Solo va como comentario en picom.conf: el alfa lo pone cada app.
+picom_lista_apps() {
+    local clases=("${APPS_TRANSPARENTES[@]}") linea c
     if [ -f "$PICOM_LISTA" ]; then
         while IFS= read -r linea; do
             linea="${linea%%#*}"; linea="$(echo "$linea" | xargs)"
             [ -n "$linea" ] && clases+=("$linea")
         done < "$PICOM_LISTA"
     fi
-    local cond="" c
     for c in "${clases[@]}"; do
         c="${c%%#*}"; c="$(echo "$c" | xargs)"
-        [ -z "$c" ] && continue
-        cond+="${cond:+ || }class_g = '$c'"
+        [ -n "$c" ] && echo "  #   $c"
     done
-    # Tipos que no se tocan (menús, notificaciones...) y GTK con marco propio
-    local tipos="window_type = 'dnd' || window_type = 'notification' || window_type = 'tooltip' || window_type = 'popup_menu' || window_type = 'dropdown_menu' || window_type = 'menu' || window_type = 'combo'"
-    if [ -n "$cond" ]; then
-        echo "!($cond) && !($tipos) && !_GTK_FRAME_EXTENTS@:c"
-    else
-        echo "!($tipos) && !_GTK_FRAME_EXTENTS@:c"
-    fi
 }
 
 picom_instalar() {
@@ -62,17 +59,10 @@ picom_instalar() {
 picom_escribir_config() {
     mkdir -p "$PICOM_DIR"
 
-    # Shader: fuerza alfa = 1.0 (ventana completamente opaca)
-    cat > "$PICOM_SHADER" << 'GLSLEOF'
-#version 330
-in vec2 texcoord;
-uniform sampler2D tex;
-vec4 window_shader() {
-    vec4 c = texelFetch(tex, ivec2(texcoord), 0);
-    c.a = 1.0;
-    return c;
-}
-GLSLEOF
+    # El shader que había aquí (opaque.glsl, c.a = 1.0) se ha eliminado a
+    # propósito: convertía en negro los píxeles transparentes de la ventana
+    # (icono de arrastre de Nautilus, diálogo de cerrar sesión, etc.).
+    rm -f "$PICOM_DIR/opaque.glsl"
 
     cat > "$PICOM_CONF" << CONFEOF
 #################################
@@ -151,10 +141,13 @@ opacity-rule = [
   "80:class_g     = 'Polybar'"
 ];
 
-# Alfa=1 en TODO salvo las apps de la lista APPS_TRANSPARENTES (ver picom.sh)
-window-shader-fg-rule = [
-  "$PICOM_SHADER:$(picom_condicion)"
-];
+# Sin shaders: era lo que hacía aparecer los recuadros negros. Con
+# detect-client-opacity = true (abajo) cada ventana se ve tal como la dibuja
+# su app: opaca por defecto, translúcida si la app le pone alfa.
+window-shader-fg-rule = [];
+#
+# Apps que se ven translúcidas en este sistema (el alfa lo ponen ellas):
+$(picom_lista_apps)
 
 #################################
 #     Background-Blurring       #
@@ -201,7 +194,7 @@ wintypes:
   dnd = { shadow = false; fade = false; }
 };
 CONFEOF
-    info "picom.conf y opaque.glsl escritos en $PICOM_DIR"
+    info "picom.conf escrito en $PICOM_DIR"
 }
 
 picom_autostart() {

@@ -269,10 +269,35 @@ aplicar_fondo_escritorio() {
 
     asegurar_xfconfd
 
-    local monitores workspaces mon ws base
-    monitores=$(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep -oP '(?<=/screen0/)[^/]+' | sort -u)
-    [ -z "$monitores" ] && monitores="monitor0"
-    info "Monitores detectados: $monitores"
+    local workspaces ws base clave mons mon i
+    local -a nombres=() claves=() validos=()
+    local de_xrandr=0
+
+    # ── Monitores ─────────────────────────────────────────────────────
+    # Los nombres de verdad salen de xrandr. Ojo con como los nombra XFCE:
+    # guarda el fondo en "monitor" + <nombre del RandR> (asi se llama la clave
+    # de verdad: monitoreDP-1-1) y, si esa no existe, cae a "monitor" + <numero>
+    # (monitor0, monitor1...). Antes aqui se leian los nombres de xfconf, que
+    # es un circulo vicioso: un nombre mal escrito se copiaba a si mismo para
+    # siempre y el nombre bueno nunca llegaba a escribirse, con lo cual al
+    # reiniciar xfdesktop no encontraba el fondo y el escritorio se quedaba
+    # en gris. Por eso se escriben LAS DOS formas de cada monitor.
+    mapfile -t nombres < <(xrandr --query 2>/dev/null | awk '/ connected/{print $1}')
+    [ "${#nombres[@]}" -gt 0 ] && de_xrandr=1
+    if [ "${#nombres[@]}" -eq 0 ]; then
+        mapfile -t nombres < <(xfconf-query -c xfce4-desktop -l 2>/dev/null \
+            | grep -oP '(?<=/screen0/)[^/]+' | sort -u)
+    fi
+    [ "${#nombres[@]}" -eq 0 ] && nombres=(monitor0)
+
+    for ((i = 0; i < ${#nombres[@]}; i++)); do
+        mon=${nombres[$i]}
+        claves+=("monitor$mon")              # la que usa XFCE 4.16+
+        [ "$de_xrandr" -eq 1 ] && claves+=("monitor$i")   # la de reserva
+        claves+=("$mon")                       # XFCE muy antiguo
+        validos+=("monitor$mon" "monitor$i" "$mon")
+    done
+    info "Monitores: ${nombres[*]}  ->  claves: ${claves[*]}"
 
     workspaces=$(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep -oP '(?<=workspace)[0-9]+' | sort -un)
     [ -z "$workspaces" ] && workspaces="0 1 2 3"
@@ -280,15 +305,30 @@ aplicar_fondo_escritorio() {
         echo "$workspaces" | grep -qx "$ws" || workspaces="$workspaces $ws"
     done
 
-    for mon in $monitores; do
+    for clave in "${claves[@]}"; do
         for ws in $workspaces; do
-            base="/backdrop/screen0/${mon}/workspace${ws}"
+            base="/backdrop/screen0/${clave}/workspace${ws}"
             xfconf-query -c xfce4-desktop -p "${base}/last-image"  --create -t string -s "$fondo" 2>/dev/null || true
             xfconf-query -c xfce4-desktop -p "${base}/image-style" --create -t int    -s 4        2>/dev/null || true
             xfconf-query -c xfce4-desktop -p "${base}/image-show"  --create -t bool   -s true     2>/dev/null || true
             xfconf-query -c xfce4-desktop -p "${base}/color-style" --create -t int    -s 1        2>/dev/null || true
         done
     done
+
+    # Limpia las claves de monitores que ya no existen (p. ej. cuando el dock o
+    # la TV cambian de nombre), que si no se quedan applying el fondo a un
+    # monitor que no esta. Solo si el listado vino de xrandr: sin eso no hay
+    # forma de saber que un nombre es mentira.
+    if [ "$de_xrandr" -eq 1 ]; then
+        for ruta in $(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep '^/backdrop/screen0/'); do
+            mons=${ruta#/backdrop/screen0/}
+            mons=${mons%%/*}
+            case " ${validos[*]} " in
+                *" $mons "*) continue ;;
+            esac
+            xfconf-query -c xfce4-desktop -p "$ruta" -r 2>/dev/null || true
+        done
+    fi
 
     # Cualquier propiedad de imagen que ya exista (formatos viejos)
     for ruta in $(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep -E "last-image|image-path|last-single-image"); do

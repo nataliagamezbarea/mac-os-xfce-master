@@ -259,6 +259,169 @@ NAUTEOF
 }
 
 
+# ── Parche de la extensión ─────────────────────────────────────────
+# La extensión upstream ignora las claves "icon" y "tip" del config.json y construye
+# el Nautilus.MenuItem solo con name+label. En Nautilus >= 43 los elementos propios del
+# menú contextual sí llevan icono, así que GTK reserva la columna de iconos y todas las
+# entradas de la extensión se dibujaban con un hueco en blanco delante.
+# Además update_config() conservaba la lista de acciones anterior cuando el config.json
+# faltaba o estaba corrupto, de modo que la caché del menú podía servir entradas de una
+# configuración vieja (lo que salía solo al principio, nada más instalar).
+# Es idempotente: se reaplica en cada instalación sin romper nada.
+nautilus_extension_parche() {
+    local parche
+    parche="$(mktemp /tmp/afn-parche-XXXXXX.py)"
+    cat > "$parche" << 'PATCHEOF'
+#!/usr/bin/env python3
+# Parche de Actions for Nautilus.
+#
+# 1) Las claves "icon" y "tip" del config.json nunca se leian: _create_command_menu_item
+#    construia el Nautilus.MenuItem solo con name+label. En Nautilus >= 43 los elementos
+#    propios del menu contextual llevan icono, asi que GTK reserva la columna de iconos
+#    y todas las entradas de la extension se dibujaban con un hueco en blanco delante
+#    ("bug de espacios en blanco"). Nautilus.MenuItem si tiene las propiedades icon/tip.
+# 2) update_config() dejaba self.actions con la lista anterior cuando el config.json
+#    no existia o estaba corrupto, de modo que la cache del menu podia servir entradas
+#    de una configuracion vieja (lo que aparecia solo al principio, tras instalar).
+#
+# Idempotente: se puede reaplicar en cada instalacion sin romper nada.
+import os
+import py_compile
+import sys
+
+EXT_DIR = "/usr/local/share/nautilus-python/extensions"
+
+PARCHES = [
+    ("afn_config.py", [
+        (
+            'class CommandAction():\n    def __init__(self):\n        self.label  = ""\n',
+            'class CommandAction():\n    def __init__(self):\n        self.label  = ""\n'
+            '        self.icon   = ""\n        self.tip    = ""\n',
+            "CommandAction: campos icon/tip",
+        ),
+        (
+            'class MenuAction():\n    def __init__(self):\n        self.label  = ""\n        self.sort = True\n',
+            'class MenuAction():\n    def __init__(self):\n        self.label  = ""\n'
+            '        self.icon   = ""\n        self.sort = True\n',
+            "MenuAction: campo icon",
+        ),
+        (
+            '    action.label = json_action["label"].strip() if type(json_action.get("label", "")) == str else ""\n'
+            '    action.sort = json_action.get("sort", "manual") == "auto"\n',
+            '    action.label = json_action["label"].strip() if type(json_action.get("label", "")) == str else ""\n'
+            '    action.icon = json_action.get("icon", "").strip() if type(json_action.get("icon", "")) == str else ""\n'
+            '    action.sort = json_action.get("sort", "manual") == "auto"\n',
+            "_check_menu_action: leer icon",
+        ),
+        (
+            '    action.command_line = json_action["command_line"].strip() if "command_line" in json_action and isinstance(json_action["command_line"], str) else ""\n',
+            '    action.icon = json_action.get("icon", "").strip() if type(json_action.get("icon", "")) == str else ""\n'
+            '    action.tip = json_action.get("tip", "").strip() if type(json_action.get("tip", "")) == str else ""\n'
+            '    action.command_line = json_action["command_line"].strip() if "command_line" in json_action and isinstance(json_action["command_line"], str) else ""\n',
+            "_check_command_action: leer icon/tip",
+        ),
+        (
+            '            else:\n'
+            '                logger.warning(f"Config file {_config_path} does not exist. Extension will not display any menu items until a config file is created.")\n'
+            '        except Exception as e:\n'
+            '            logger.error("Config file " + _config_path + " load failed", exc_info=e)\n',
+            '            else:\n'
+            '                logger.warning(f"Config file {_config_path} does not exist. Extension will not display any menu items until a config file is created.")\n'
+            '                # Sin fichero no se arrastran las acciones de la configuracion anterior\n'
+            '                self.reset_config()\n'
+            '        except Exception as e:\n'
+            '            logger.error("Config file " + _config_path + " load failed", exc_info=e)\n'
+            '            # Un config roto no debe dejar el menu anterior colgado\n'
+            '            self.actions = []\n',
+            "update_config: descartar acciones obsoletas",
+        ),
+    ]),
+    ("afn_menu.py", [
+        (
+            '        menu_item = Nautilus.MenuItem(\n'
+            '            name="Actions4Nautilus: :Menu" + action.idString + group,\n'
+            '            label=action.label,\n'
+            '        )\n',
+            '        menu_item = Nautilus.MenuItem(\n'
+            '            name="Actions4Nautilus: :Menu" + action.idString + group,\n'
+            '            label=action.label,\n'
+            '            icon=action.icon or None,\n'
+            '        )\n',
+            "submenu: pasar icono",
+        ),
+        (
+            '    menu_item = Nautilus.MenuItem(name=name, label=label)\n',
+            '    menu_item = Nautilus.MenuItem(name=name, label=label,\n'
+            '                                  icon=action.icon or None,\n'
+            '                                  tip=action.tip or None)\n',
+            "entrada de comando: pasar icono y tip",
+        ),
+    ]),
+]
+
+
+def main():
+    applied, already, fallidos = [], [], []
+
+    for nombre, cambios in PARCHES:
+        ruta = os.path.join(EXT_DIR, nombre)
+        if not os.path.isfile(ruta):
+            fallidos.append("%s: no existe" % nombre)
+            continue
+        with open(ruta) as f:
+            texto = f.read()
+        original = texto
+        for viejo, nuevo, etiqueta in cambios:
+            if nuevo in texto:
+                already.append("%s: %s" % (nombre, etiqueta))
+            elif viejo in texto:
+                texto = texto.replace(viejo, nuevo, 1)
+                applied.append("%s: %s" % (nombre, etiqueta))
+            else:
+                # upstream cambiado: no se rompe la instalacion, solo se avisa
+                fallidos.append("%s: %s" % (nombre, etiqueta))
+        if texto != original:
+            with open(ruta, "w") as f:
+                f.write(texto)
+            os.chmod(ruta, 0o644)
+
+    if fallidos:
+        for a in applied:
+            print("  aplicado    %s" % a)
+        for a in fallidos:
+            print("  NO ENCONTRADO %s" % a)
+        print("  parche incompleto: %d cambios, %d sin aplicar" % (len(applied), len(fallidos)))
+        return 2
+
+    # comprobacion de sintaxis de lo escrito
+    for nombre, _ in PARCHES:
+        ruta = os.path.join(EXT_DIR, nombre)
+        if os.path.isfile(ruta):
+            try:
+                py_compile.compile(ruta, cfile="/tmp/.afn-check.pyc", doraise=True)
+            except py_compile.PyCompileError as e:
+                print("  error de sintaxis en %s: %s" % (nombre, e))
+                return 3
+
+    for a in applied:
+        print("  aplicado    %s" % a)
+    for a in already:
+        print("  ya estaba   %s" % a)
+    print("  %d cambios, %d ya presentes" % (len(applied), len(already)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+PATCHEOF
+    if sudo python3 "$parche"; then
+        info "Extensión parcheada: los menús contextuales salen con icono"
+    else
+        warn "No se pudo parchear la extensión; el menú contextual seguirá sin iconos"
+    fi
+    rm -f "$parche"
+}
+
 nautilus_extension_menu() {
     step "Instalando gestor de menú contextual (Actions for Nautilus)"
 
@@ -281,6 +444,9 @@ nautilus_extension_menu() {
     else
         info "Extensión Actions for Nautilus ya instalada"
     fi
+
+    # El upstream no lee los iconos del config.json: se parchea siempre
+    nautilus_extension_parche
 
     local cfg_dir="$HOME/.local/share/actions-for-nautilus"
     mkdir -p "$cfg_dir"
