@@ -1701,6 +1701,8 @@ DOCKEOF
       "type": "command",
       "label": "Abrir con Visual Studio Code",
       "command_line": "code %F",
+      "use_shell": true,
+      "use_v1_interpolation": false,
       "filetypes": ["file", "directory"],
       "icon": "code"
     },
