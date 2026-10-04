@@ -874,7 +874,8 @@ if "BACKUP_SCRIPT" not in s:
         'PLANK_DIR = os.path.expanduser("~/.config/plank/dock1/launchers")',
         'PLANK_DIR = os.path.expanduser("~/.config/plank/dock1/launchers")\n'
         'BACKUP_SCRIPT = os.path.expanduser("~/.local/bin/backup.sh")\n'
-        'BACKUP_ICON = os.path.expanduser("~/.icons/custom/plank-backup.svg")',
+        'BACKUP_ICON = os.path.expanduser("~/.icons/custom/plank-backup.png")\n'
+        'BACKUP_ICON_SVG = os.path.expanduser("~/.icons/custom/plank-backup.svg")',
         1)
     s = s.replace(
         "        self._flow_items = []\n        for name, cmd, icon, pix in self.apps:",
@@ -884,18 +885,22 @@ if "BACKUP_SCRIPT" not in s:
         "    def _on_flow_btn(self, btn):",
         "    def _add_backup_button(self, q=\"\"):\n"
         "        if q and \"respaldo\" not in q:\n            return\n"
-        "        try:\n            pix = GdkPixbuf.Pixbuf.new_from_file_at_size(BACKUP_ICON, 48, 48)\n"
-        "        except Exception:\n            pix = get_fallback()\n"
+        "        pix = None\n"
+        "        for _ic in (BACKUP_ICON, BACKUP_ICON_SVG):\n"
+        "            try:\n                pix = GdkPixbuf.Pixbuf.new_from_file_at_size(_ic, 48, 48)\n"
+        "                break\n            except Exception:\n                pass\n"
+        "        if pix is None:\n            pix = get_fallback()\n"
         "        btn = Gtk.Button()\n"
         "        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)\n"
         "        inner.set_margin_start(4); inner.set_margin_end(4)\n"
         "        inner.set_margin_top(4); inner.set_margin_bottom(4)\n"
         "        inner.pack_start(Gtk.Image.new_from_pixbuf(pix), False, False, 0)\n"
         "        lbl = Gtk.Label(label=\"Respaldo\")\n"
-        "        lbl.set_max_width_chars(12)\n        lbl.set_xalign(0.5)\n"
+        "        lbl.set_max_width_chars(12)\n        lbl.set_lines(1)\n        lbl.set_xalign(0.5)\n"
         "        inner.pack_start(lbl, False, False, 0)\n"
         "        btn.add(inner)\n"
         "        btn.set_relief(Gtk.ReliefStyle.NONE)\n"
+        "        btn.set_size_request(84, 84)\n"
         "        btn.connect(\"clicked\", self._on_backup_clicked)\n"
         "        self.flow.add(btn)\n\n"
         "    def _on_backup_clicked(self, w):\n"
