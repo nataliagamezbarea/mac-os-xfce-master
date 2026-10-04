@@ -13,7 +13,14 @@ warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 error() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 step()  { echo -e "\n${BOLD}━━━ $1 ━━━${NC}"; }
 
-apt_silencioso() { DEBIAN_FRONTEND=noninteractive sudo apt-get -qq -y "$@"; }
+# -qq solo silencia a APT, no a DPKG: al instalar de verdad se cuela el
+# "Desempaquetando / Preparando / Setting up" de dpkg. Use-Pty=0 quita la
+# barra de progreso (ademas deja el cursor en sitios raros) y la redireccion
+# se come el resto. El codigo de salida se conserva para los "|| ...".
+apt_silencioso() {
+    DEBIAN_FRONTEND=noninteractive sudo apt-get -qq -y \
+        -o Dpkg::Use-Pty=0 -o Dpkg::Progress-Fancy=0 "$@" >/dev/null 2>&1
+}
 
 DIR_COMUN=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 

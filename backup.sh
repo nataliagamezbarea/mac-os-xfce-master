@@ -2006,7 +2006,7 @@ if [ -d ../apt/keyrings ]; then
 fi
 
 echo "== Actualizando repositorios =="
-apt-get update -qq
+apt-get update -qq >/dev/null 2>&1
 instalados=0; saltados=0; errores=0
 instalar_uno() {
     local pkg="$1"

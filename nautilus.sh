@@ -1946,7 +1946,7 @@ nautilus_desinstalar_thunar() {
     # pero thunar-archive-plugin sigue cargando sus librerías para el menú
     # contextual del escritorio.
     if [ -f /usr/bin/thunar ] && [ ! -f /usr/bin/thunar.distrib ]; then
-        sudo dpkg-divert --add --rename --divert /usr/bin/thunar.distrib /usr/bin/thunar
+        sudo dpkg-divert --add --rename --divert /usr/bin/thunar.distrib /usr/bin/thunar >/dev/null 2>&1
     fi
     # Wrapper: llama a thunar real excepto --daemon
     # Necesario para que "Propiedades" y "Renombrar" del escritorio funcionen
