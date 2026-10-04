@@ -1379,16 +1379,18 @@ plank_exportar() {
         ninguna+=("FALSE" "${secciones[$i]}")
     done
 
+    # Estado de las casillas: todo marcado por defecto. Los presets lo cambian.
+    local estado=()
+    for i in "${!secciones[@]}"; do
+        estado+=("TRUE" "${secciones[$i]}")
+    done
+
     while true; do
         # ── Selección por secciones con presets de botones ──────────────
-        # Presets que configuran las banderas de golpe:
-        #   • Respaldo TODO        → todo marcado (lo normal)
-        #   • Respaldo solo navbar  → dock + lanzadores + paquetes del navbar
-        #   • Respaldo autostarts   → autostart + scripts + apps
-        #   • Respaldo otros       → todo menos los paquetes del navbar
-        # Y para ajustar fino, las casillas individuales + Seleccionar/Deseleccionar todo.
+        # Los presets SOLO marcan las casillas y vuelven a esta misma ventana,
+        # para que el usuario revise y pulse Aceptar. No saltan a la carpeta.
         que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
-            --text="Elige un <b>preset</b> o ajusta las casillas.\nTodo viene marcado por defecto." \
+            --text="Elige un <b>preset</b> o ajusta las casillas.\nCuando esté como lo quieras, pulsa <b>Aceptar</b>." \
             --column="" --column="Sección" --column="Qué guarda" \
             --separator="|" \
             --extra-button="Respaldo TODO" \
@@ -1398,7 +1400,7 @@ plank_exportar() {
             --extra-button="Seleccionar todo" \
             --extra-button="Deseleccionar todo" \
             --extra-button="Cancelar" \
-            --width=860 --height=520 "${todas[@]}" 2>/dev/null)
+            --width=860 --height=520 "${estado[@]}" 2>/dev/null)
         eleccion=$?
         case "$eleccion" in
             0) break ;;                        # Aceptar
@@ -1406,47 +1408,35 @@ plank_exportar() {
             *)                                 # Botón extra
                 case "$que" in
                     "Respaldo TODO")
-                        f_config=true f_apps=true f_scripts=true f_autostart=true f_iconos=true
-                        f_navbar=true f_manuales=true
-                        break ;;
+                        for i in "${!secciones[@]}"; do estado[$((i*2))]="TRUE"; done ;;
                     "Respaldo solo navbar")
-                        f_config=true f_apps=true f_scripts=false f_autostart=false f_iconos=true
-                        f_navbar=true f_manuales=false
-                        break ;;
+                        for i in "${!secciones[@]}"; do
+                            case "${secciones[$i]}" in
+                                "Configuración del dock"*|"Lanzadores del dock"*|"Apps personalizadas"*|"Iconos personalizados"*|"Paquetes del navbar"*)
+                                    estado[$((i*2))]="TRUE" ;;
+                                *)  estado[$((i*2))]="FALSE" ;;
+                            esac
+                        done ;;
                     "Respaldo autostarts")
-                        f_config=false f_apps=true f_scripts=true f_autostart=true f_iconos=false
-                        f_navbar=false f_manuales=false
-                        break ;;
+                        for i in "${!secciones[@]}"; do
+                            case "${secciones[$i]}" in
+                                "Apps personalizadas"*|"Scripts"*|"Autostart"*)
+                                    estado[$((i*2))]="TRUE" ;;
+                                *)  estado[$((i*2))]="FALSE" ;;
+                            esac
+                        done ;;
                     "Respaldo otros")
-                        f_config=true f_apps=true f_scripts=true f_autostart=true f_iconos=true
-                        f_navbar=false f_manuales=true
-                        break ;;
+                        for i in "${!secciones[@]}"; do
+                            case "${secciones[$i]}" in
+                                "Paquetes del navbar"*)
+                                    estado[$((i*2))]="FALSE" ;;
+                                *)  estado[$((i*2))]="TRUE" ;;
+                            esac
+                        done ;;
                     "Seleccionar todo")
-                        que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
-                            --text="Elige un <b>preset</b> o ajusta las casillas.\nTodo viene marcado por defecto." \
-                            --column="" --column="Sección" --column="Qué guarda" \
-                            --separator="|" \
-                            --extra-button="Respaldo TODO" \
-                            --extra-button="Respaldo solo navbar" \
-                            --extra-button="Respaldo autostarts" \
-                            --extra-button="Respaldo otros" \
-                            --extra-button="Seleccionar todo" \
-                            --extra-button="Deseleccionar todo" \
-                            --extra-button="Cancelar" \
-                            --width=860 --height=520 "${todas[@]}" 2>/dev/null) ;;
+                        for i in "${!secciones[@]}"; do estado[$((i*2))]="TRUE"; done ;;
                     "Deseleccionar todo")
-                        que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
-                            --text="Elige un <b>preset</b> o ajusta las casillas.\nTodo viene marcado por defecto." \
-                            --column="" --column="Sección" --column="Qué guarda" \
-                            --separator="|" \
-                            --extra-button="Respaldo TODO" \
-                            --extra-button="Respaldo solo navbar" \
-                            --extra-button="Respaldo autostarts" \
-                            --extra-button="Respaldo otros" \
-                            --extra-button="Seleccionar todo" \
-                            --extra-button="Deseleccionar todo" \
-                            --extra-button="Cancelar" \
-                            --width=860 --height=520 "${ninguna[@]}" 2>/dev/null) ;;
+                        for i in "${!secciones[@]}"; do estado[$((i*2))]="FALSE"; done ;;
                     *) return 0 ;;             # Cancelar
                 esac
                 ;;
