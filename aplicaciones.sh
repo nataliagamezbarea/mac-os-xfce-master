@@ -110,26 +110,23 @@ aplicaciones_autostart() {
         apt_silencioso install blueman 2>/dev/null || true
     fi
 
-    # ── BLOQUEO: xfce4-screensaver (único bloqueador, sin duplicados).
-    #    Sustituye a light-locker: light-locker 1.8.0 deja la pantalla en
-    #    negro al desbloquear la 2ª vez tras cerrar la tapa (bug conocido). ──
+    # ── SIN BLOQUEO: entrar directo al escritorio, sin desbloquear ────────
+    # Ni xfce4-screensaver ni light-locker: el usuario quiere entrar directo
+    # al escritorio al iniciar sesión, no una pantalla de desbloqueo.
+    # Ambos se desactivan en ~/.config/autostart (user_override) con todas
+    # las claves necesarias para que ni XFCE ni GNOME los arranquen.
     if command -v xfce4-screensaver &>/dev/null || [ -f /etc/xdg/autostart/xfce4-screensaver.desktop ]; then
         cat > ~/.config/autostart/xfce4-screensaver.desktop << 'EOF'
 [Desktop Entry]
 Type=Application
 Name=Xfce Screensaver
-Comment=Bloqueo de pantalla (unico bloqueador)
 Exec=xfce4-screensaver
-Hidden=false
+Hidden=true
+X-GNOME-Autostart-enabled=false
 EOF
-        xfconf-query -c xfce4-session -p /general/LockCommand -s "xfce4-screensaver-command --lock" 2>/dev/null || true
-        info "Bloqueo: xfce4-screensaver (lock fiable)"
-    else
-        xfconf-query -c xfce4-session -p /general/LockCommand -s "loginctl lock-session" 2>/dev/null || true
+        pkill -x xfce4-screensaver 2>/dev/null || true
+        info "xfce4-screensaver desactivado (sin bloqueo de pantalla)"
     fi
-    # light-locker desactivado (autostart oculto) para no duplicar bloqueos.
-    # Lo anulamos en ~/.config/autostart (user override) con todas las claves
-    # necesarias para que ni XFCE ni GNOME lo arranquen.
     if command -v light-locker &>/dev/null || [ -f /etc/xdg/autostart/light-locker.desktop ]; then
         cat > ~/.config/autostart/light-locker.desktop << 'EOF'
 [Desktop Entry]
@@ -140,7 +137,7 @@ Hidden=true
 X-GNOME-Autostart-enabled=false
 EOF
         pkill -x light-locker 2>/dev/null || true
-        info "light-locker eliminado del inicio de sesión"
+        info "light-locker desactivado (sin bloqueo de pantalla)"
     fi
 
     # ── Plank: MÁXIMA prioridad en el arranque (INMEDIATO, antes de red) ──
