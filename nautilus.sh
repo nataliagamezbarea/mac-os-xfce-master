@@ -1493,10 +1493,10 @@ PLANKPY
 
     # ── Copia de seguridad de Plank: añadir botón directo al diálogo "Añadir a Plank" ──
     local dir_proyecto_backup; dir_proyecto_backup=$(cd "$(dirname "$0")" && pwd)
-    if [ -f "$dir_proyecto_backup/plank-backup.sh" ]; then
+    if [ -f "$dir_proyecto_backup/backup.sh" ]; then
         mkdir -p "$HOME/.local/bin" "$HOME/.icons/custom"
-        cp "$dir_proyecto_backup/plank-backup.sh" "$HOME/.local/bin/plank-backup.sh"
-        chmod +x "$HOME/.local/bin/plank-backup.sh"
+        cp "$dir_proyecto_backup/backup.sh" "$HOME/.local/bin/backup.sh"
+        chmod +x "$HOME/.local/bin/backup.sh"
         # El PNG va primero porque hay PCs sin cargador de SVG, y entonces el
         # icono no se pinta o sale borroso en el dock.
         [ -f "$dir_proyecto_backup/icon-plank-backup.svg" ] && \
@@ -1517,7 +1517,7 @@ if "BACKUP_SCRIPT" not in s:
     s = s.replace(
         'PLANK_DIR = os.path.expanduser("~/.config/plank/dock1/launchers")',
         'PLANK_DIR = os.path.expanduser("~/.config/plank/dock1/launchers")\n'
-        'BACKUP_SCRIPT = os.path.expanduser("~/.local/bin/plank-backup.sh")\n'
+        'BACKUP_SCRIPT = os.path.expanduser("~/.local/bin/backup.sh")\n'
         'BACKUP_ICON = os.path.expanduser("~/.icons/custom/plank-backup.svg")',
         1)
     s = s.replace(

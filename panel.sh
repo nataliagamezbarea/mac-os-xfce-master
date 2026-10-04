@@ -818,10 +818,10 @@ PYEOF
 
     # ── Copia de seguridad de Plank: añadir botón directo al diálogo "Añadir a Plank" ──
     local dir_proyecto_backup; dir_proyecto_backup=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-    if [ -f "$dir_proyecto_backup/plank-backup.sh" ]; then
+    if [ -f "$dir_proyecto_backup/backup.sh" ]; then
         mkdir -p "$HOME/.local/bin" "$HOME/.icons/custom"
-        cp "$dir_proyecto_backup/plank-backup.sh" "$HOME/.local/bin/plank-backup.sh"
-        chmod +x "$HOME/.local/bin/plank-backup.sh"
+        cp "$dir_proyecto_backup/backup.sh" "$HOME/.local/bin/backup.sh"
+        chmod +x "$HOME/.local/bin/backup.sh"
         # El PNG va primero porque hay PCs sin cargador de SVG, y entonces el
         # icono no se pinta o sale borroso en el dock.
         [ -f "$dir_proyecto_backup/icon-plank-backup.svg" ] && \
@@ -842,7 +842,7 @@ if "BACKUP_SCRIPT" not in s:
     s = s.replace(
         'PLANK_DIR = os.path.expanduser("~/.config/plank/dock1/launchers")',
         'PLANK_DIR = os.path.expanduser("~/.config/plank/dock1/launchers")\n'
-        'BACKUP_SCRIPT = os.path.expanduser("~/.local/bin/plank-backup.sh")\n'
+        'BACKUP_SCRIPT = os.path.expanduser("~/.local/bin/backup.sh")\n'
         'BACKUP_ICON = os.path.expanduser("~/.icons/custom/plank-backup.svg")',
         1)
     s = s.replace(
@@ -1017,7 +1017,7 @@ local lanzadores_origen="$HOME/ventura-xfce/dock/launchers"
 }
 
 _panel_fix_launcher_plank_backup() {
-    # El lanzador "Respaldo" lo pone el propio plank-backup.sh con su funcion
+    # El lanzador "Respaldo" lo pone el propio backup.sh con su funcion
     # plank_asegurar_lanzador. Antes esta funcion escribia aqui un .desktop
     # con el nombre viejo "Respaldo de Plank", el icono SVG y un .dockitem
     # llamado plank-backup: por eso el dock acababa con DOS iconos de lo
@@ -1025,10 +1025,10 @@ _panel_fix_launcher_plank_backup() {
     # Delegando, el nombre, el icono y la POSICION en el dock son los del
     # script y no hay nada que se contradiga.
     local dir_proyecto; dir_proyecto=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-    local instalado="$HOME/.local/bin/plank-backup.sh"
-    [ -f "$instalado" ] || instalado="$dir_proyecto/plank-backup.sh"
+    local instalado="$HOME/.local/bin/backup.sh"
+    [ -f "$instalado" ] || instalado="$dir_proyecto/backup.sh"
     if [ ! -f "$instalado" ]; then
-        warn "plank-backup.sh no encontrado: no se anade el lanzador 'Respaldo'"
+        warn "backup.sh no encontrado: no se anade el lanzador 'Respaldo'"
         return
     fi
     chmod +x "$instalado"

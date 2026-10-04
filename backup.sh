@@ -1,6 +1,6 @@
 #!/bin/bash
 # ─────────────────────────────────────────────────────────────────────────────
-# plank-backup.sh — RESPALDO de Plank + tus cosas, A TU ELECCIÓN
+# backup.sh — RESPALDO de Plank + tus cosas, A TU ELECCIÓN
 #
 # Al exportar lo primero que pregunta es "¿respaldo TODO?" (lo normal). Si
 # dices que no, eliges entre:
@@ -135,8 +135,8 @@ plank_asegurar_lanzador() {
     # no la carpeta de donde se esté ejecutando este script ahora mismo (que
     # puede ser un Descargado de prueba). Es la misma que panel.sh y
     # nautilus.sh mantienen actualizada.
-    local ruta="$HOME/.local/bin/plank-backup.sh"
-    [ -f "$ruta" ] || ruta="$DIR/plank-backup.sh"
+    local ruta="$HOME/.local/bin/backup.sh"
+    [ -f "$ruta" ] || ruta="$DIR/backup.sh"
 
     # ── 1) el .desktop, con el nombre corto ("Respaldo") y el icono bueno ──
     tmp=$(mktemp) || return 0
@@ -801,7 +801,7 @@ app_dir_de() {
 
 TOOLBOX_DIR="$HOME/.local/share/JetBrains/Toolbox"
 
-# El ayudante va DENTRO del script a proposito: plank-backup.sh se copia
+# El ayudante va DENTRO del script a proposito: backup.sh se copia
 # suelto a ~/.local/bin (lo hacen panel.sh y nautilus.sh) y se lanza desde el
 # dock. Si dependiera de un toolbox.py hermano, en el PC del usuario no
 # existiria y el respaldo de apps grandes se caeria al vacio.
