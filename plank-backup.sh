@@ -1350,7 +1350,7 @@ salvar_artefactos_origen() {
 # banderas se declaran arriba y siempre valen "true".
 
 plank_exportar() {
-    local carpeta que eleccion todo
+    local carpeta que eleccion
     local secciones=(
         "Configuración del dock:dconf, temas y orden de los iconos"
         "Lanzadores del dock:.desktop, iconos y ejecutables de cada app anclada"
@@ -1371,57 +1371,88 @@ plank_exportar() {
     done
 
     while true; do
-        # ── Selección por secciones: TODO marcado por defecto ────────────
-        # Una sola pantalla con todas las secciones marcadas. El usuario pulsa
-        # Aceptar para respaldar todo, o desmarca lo que no quiera. Sin pasos
-        # extra: nada de "¿TODO?" seguido de "¿qué quieres?".
+        # ── Selección por secciones con presets de botones ──────────────
+        # Presets que configuran las banderas de golpe:
+        #   • Respaldo TODO        → todo marcado (lo normal)
+        #   • Respaldo solo navbar  → dock + lanzadores + paquetes del navbar
+        #   • Respaldo autostarts   → autostart + scripts + apps
+        #   • Respaldo otros       → todo menos los paquetes del navbar
+        # Y para ajustar fino, las casillas individuales + Seleccionar/Deseleccionar todo.
         que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
-            --text="Todas las secciones vienen marcadas. Pulsa <b>Aceptar</b> para\nrespaldar todo, o desmarca lo que no necesites." \
+            --text="Elige un <b>preset</b> o ajusta las casillas.\nTodo viene marcado por defecto." \
             --column="" --column="Sección" --column="Qué guarda" \
             --separator="|" \
+            --extra-button="Respaldo TODO" \
+            --extra-button="Respaldo solo navbar" \
+            --extra-button="Respaldo autostarts" \
+            --extra-button="Respaldo otros" \
             --extra-button="Seleccionar todo" \
             --extra-button="Deseleccionar todo" \
             --extra-button="Cancelar" \
-            --width=820 --height=480 2>/dev/null)
+            --width=860 --height=520 "${todas[@]}" 2>/dev/null)
         eleccion=$?
         case "$eleccion" in
             0) break ;;                        # Aceptar
             255) return 0 ;;                   # Cerrar ventana
             *)                                 # Botón extra
                 case "$que" in
-                    "Seleccionar todo")    que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
-                        --text="Todas las secciones vienen marcadas. Pulsa <b>Aceptar</b> para\nrespaldar todo, o desmarca lo que no necesites." \
-                        --column="" --column="Sección" --column="Qué guarda" \
-                        --separator="|" \
-                        --extra-button="Seleccionar todo" \
-                        --extra-button="Deseleccionar todo" \
-                        --extra-button="Cancelar" \
-                        --width=820 --height=480 "${todas[@]}" 2>/dev/null) ;;
-                    "Deseleccionar todo")  que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
-                        --text="Todas las secciones vienen marcadas. Pulsa <b>Aceptar</b> para\nrespaldar todo, o desmarca lo que no necesites." \
-                        --column="" --column="Sección" --column="Qué guarda" \
-                        --separator="|" \
-                        --extra-button="Seleccionar todo" \
-                        --extra-button="Deseleccionar todo" \
-                        --extra-button="Cancelar" \
-                        --width=820 --height=480 "${ninguna[@]}" 2>/dev/null) ;;
+                    "Respaldo TODO")
+                        f_config=true f_apps=true f_scripts=true f_autostart=true f_iconos=true
+                        f_navbar=true f_manuales=true
+                        break ;;
+                    "Respaldo solo navbar")
+                        f_config=true f_apps=true f_scripts=false f_autostart=false f_iconos=true
+                        f_navbar=true f_manuales=false
+                        break ;;
+                    "Respaldo autostarts")
+                        f_config=false f_apps=true f_scripts=true f_autostart=true f_iconos=false
+                        f_navbar=false f_manuales=false
+                        break ;;
+                    "Respaldo otros")
+                        f_config=true f_apps=true f_scripts=true f_autostart=true f_iconos=true
+                        f_navbar=false f_manuales=true
+                        break ;;
+                    "Seleccionar todo")
+                        que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
+                            --text="Elige un <b>preset</b> o ajusta las casillas.\nTodo viene marcado por defecto." \
+                            --column="" --column="Sección" --column="Qué guarda" \
+                            --separator="|" \
+                            --extra-button="Respaldo TODO" \
+                            --extra-button="Respaldo solo navbar" \
+                            --extra-button="Respaldo autostarts" \
+                            --extra-button="Respaldo otros" \
+                            --extra-button="Seleccionar todo" \
+                            --extra-button="Deseleccionar todo" \
+                            --extra-button="Cancelar" \
+                            --width=860 --height=520 "${todas[@]}" 2>/dev/null) ;;
+                    "Deseleccionar todo")
+                        que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
+                            --text="Elige un <b>preset</b> o ajusta las casillas.\nTodo viene marcado por defecto." \
+                            --column="" --column="Sección" --column="Qué guarda" \
+                            --separator="|" \
+                            --extra-button="Respaldo TODO" \
+                            --extra-button="Respaldo solo navbar" \
+                            --extra-button="Respaldo autostarts" \
+                            --extra-button="Respaldo otros" \
+                            --extra-button="Seleccionar todo" \
+                            --extra-button="Deseleccionar todo" \
+                            --extra-button="Cancelar" \
+                            --width=860 --height=520 "${ninguna[@]}" 2>/dev/null) ;;
                     *) return 0 ;;             # Cancelar
                 esac
                 ;;
         esac
     done
 
-    # ── Interpretar la selección ──────────────────────────────────────────
-    # Todo marcado por defecto: si se pulsa Aceptar sin tocar nada, se respalda todo
+    # ── Interpretar la selección manual (si no se usó un preset) ─────────
     f_config=true f_apps=true f_scripts=true f_autostart=true f_iconos=true
     f_navbar=true f_manuales=true
 
-    # Desmarcar lo que el usuario haya quitado
     local sec
     for sec in "${secciones[@]}"; do
         case "$que" in
             *"$sec"*) ;;  # está marcada
-            *)  # desmarcar según qué sección es
+            *)
                 case "$sec" in
                     "Configuración del dock"*)  f_config=false ;;
                     "Lanzadores del dock"*)     f_apps=false ;;
@@ -1447,14 +1478,13 @@ plank_exportar() {
     # ── La copia, con barra de progreso y botón de cancelar ───────────────
     plank_exportar_barra "$carpeta" && return 0
 
-        # Cancelada: preguntar en vez de salir a pelo (antes no había salida).
-        if "${ZEN[@]}" --question --title="Respaldo cancelado" \
-             --text="Se paró antes de terminar.\\n\\n¿Empezar de nuevo?" \
-             --ok-label="Empezar de nuevo" --cancel-label="Salir" 2>/dev/null; then
-            continue
-        fi
-        return 0
-    done
+    # Cancelada: preguntar en vez de salir a pelo (antes no había salida).
+    if "${ZEN[@]}" --question --title="Respaldo cancelado" \
+         --text="Se paró antes de terminar.\\n\\n¿Empezar de nuevo?" \
+         --ok-label="Empezar de nuevo" --cancel-label="Salir" 2>/dev/null; then
+        plank_exportar
+    fi
+    return 0
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
