@@ -361,29 +361,38 @@ SERVICEEOF
 }
 
 optimizar_energia() {
-    step "Configurando gestor de energía (tapa → lock, sin pantalla negra)"
+    step "Configurando gestor de energía (bloquea la sesión, no LightDM)"
 
-    # 1. systemd-logind: cerrar tapa = bloquear (no suspender/hibernar)
+    # 1. systemd-logind: que NO sea el quien bloquee.
+    #    LightDM es el gestor de sesión, así que cuando logind bloquea sale SU
+    #    pantalla de acceso (la clara) en vez del diálogo de xfce4-screensaver,
+    #    y se colaba en momentos raros (al cerrar la tapa, por inactividad).
+    #    Aquí solo se suspende/hiberna: el bloqueo lo pone la sesión de XFCE.
     local logind_conf="/etc/systemd/logind.conf"
     local logind_tmp=$(mktemp)
     sudo cp "$logind_conf" "$logind_tmp" 2>/dev/null || true
 
     # Asegurar claves necesarias
-    grep -q '^HandleLidSwitch=' "$logind_tmp" 2>/dev/null || echo 'HandleLidSwitch=lock' >> "$logind_tmp"
-    grep -q '^HandleLidSwitchExternalPower=' "$logind_tmp" 2>/dev/null || echo 'HandleLidSwitchExternalPower=lock' >> "$logind_tmp"
+    grep -q '^HandleLidSwitch=' "$logind_tmp" 2>/dev/null || echo 'HandleLidSwitch=ignore' >> "$logind_tmp"
+    grep -q '^HandleLidSwitchExternalPower=' "$logind_tmp" 2>/dev/null || echo 'HandleLidSwitchExternalPower=ignore' >> "$logind_tmp"
     grep -q '^HandleLidSwitchDocked=' "$logind_tmp" 2>/dev/null || echo 'HandleLidSwitchDocked=ignore' >> "$logind_tmp"
-    grep -q '^LidSwitchIgnoreInhibited=' "$logind_tmp" 2>/dev/null || echo 'LidSwitchIgnoreInhibited=no' >> "$logind_tmp"
+    grep -q '^LidSwitchIgnoreInhibited=' "$logind_tmp" 2>/dev/null || echo 'LidSwitchIgnoreInhibited=yes' >> "$logind_tmp"
+    grep -q '^IdleAction=' "$logind_tmp" 2>/dev/null || echo 'IdleAction=ignore' >> "$logind_tmp"
 
     # Reemplazar valores si ya existen
-    sed -i 's/^#*HandleLidSwitch=.*/HandleLidSwitch=lock/' "$logind_tmp"
-    sed -i 's/^#*HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=lock/' "$logind_tmp"
+    sed -i 's/^#*HandleLidSwitch=.*/HandleLidSwitch=ignore/' "$logind_tmp"
+    sed -i 's/^#*HandleLidSwitchExternalPower=.*/HandleLidSwitchExternalPower=ignore/' "$logind_tmp"
     sed -i 's/^#*HandleLidSwitchDocked=.*/HandleLidSwitchDocked=ignore/' "$logind_tmp"
-    sed -i 's/^#*LidSwitchIgnoreInhibited=.*/LidSwitchIgnoreInhibited=no/' "$logind_tmp"
+    sed -i 's/^#*LidSwitchIgnoreInhibited=.*/LidSwitchIgnoreInhibited=yes/' "$logind_tmp"
+    sed -i 's/^#*IdleAction=.*/IdleAction=ignore/' "$logind_tmp"
 
     if ! cmp -s "$logind_tmp" "$logind_conf" 2>/dev/null; then
         sudo cp "$logind_tmp" "$logind_conf"
-        sudo systemctl restart systemd-logind 2>/dev/null || true
-        info "systemd-logind: tapa → lock (externo/dock ignorado)"
+        # Recargar en vez de reiniciar: reiniciar logind puede tumbar la
+        # sesión de escritorio; con reload ya lee los valores nuevos.
+        sudo systemctl reload systemd-logind 2>/dev/null || \
+            sudo systemctl kill -s HUP systemd-logind 2>/dev/null || true
+        info "systemd-logind: no bloquea (evita la pantalla de LightDM)"
     else
         info "systemd-logind ya configurado"
     fi
