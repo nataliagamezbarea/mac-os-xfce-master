@@ -1385,106 +1385,94 @@ plank_exportar() {
         "para reinstalar los paquetes en otro PC"
     )
 
-    # ── Un solo diálogo: presets como primera columna + checkboxes ─────
-    # Los presets van ARRIBA como primera columna. Clic en uno = directo
-    # a la carpeta. Los checkboxes de abajo son para ajuste fino.
-    # Al pulsar un preset se marcan las casillas y se puede pulsar Aceptar.
-    local estado=()
-    local i
-    for i in "${!secciones[@]}"; do
-        estado+=("TRUE" "${secciones[$i]}" "${descripciones[$i]}")
-    done
+    # ── 1) PRESETS ARRIBA: primer diálogo con los botones de combinación ──
+    # Los presets van ARRIBA en su propia lista. Clic en uno = directo a
+    # la carpeta. "Personalizar" abre los checkboxes para ajuste fino.
+    que=$("${ZEN[@]}" --list --title="Respaldo" \
+        --text="Elige una combinación o <b>Personalizar</b> para ajustar secciones sueltas." \
+        --column="Presets" --column="Qué incluye" \
+        "TODO" "Todo: dock, lanzadores, scripts, autostart, iconos y TODOS los paquetes" \
+        "NAVBAR" "Dock + lanzadores + paquetes de las apps ancladas al dock" \
+        "NAVBAR Y PAQUETES" "Dock + lanzadores + TODOS los paquetes (navbar y manuales)" \
+        "AUTOSTARTS" "Autostart + scripts + apps personalizadas" \
+        "OTROS" "Todo menos los paquetes del navbar" \
+        "Personalizar" "Elige las secciones una a una" \
+        --width=780 --height=420 2>/dev/null)
+    [ -z "$que" ] && return 0
 
-    while true; do
-        que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
-            --text="Pulsa un <b>preset</b> (arriba) para marcar las casillas,
-o ajusta las casillas y pulsa <b>Aceptar</b>." \
-            --column="" --column="Sección" --column="Qué guarda" \
-            --separator="@" \
-            --extra-button="TODO" \
-            --extra-button="NAVBAR" \
-            --extra-button="NAVBAR Y PAQUETES" \
-            --extra-button="AUTOSTARTS" \
-            --extra-button="OTROS" \
-            --extra-button="Seleccionar todo" \
-            --extra-button="Deseleccionar todo" \
-            --width=860 --height=520 "${estado[@]}" 2>/dev/null)
-        eleccion=$?
-        case "$eleccion" in
-            0) break ;;                        # Aceptar
-            255) return 0 ;;                   # Cerrar ventana
-            *)
+    # ── 2) Configurar banderas según el preset ───────────────────────────
+    case "$que" in
+        "TODO")
+            f_config=true f_apps=true f_scripts=true f_autostart=true f_iconos=true
+            f_navbar=true f_manuales=true ;;
+        "NAVBAR")
+            f_config=true f_apps=true f_scripts=false f_autostart=false f_iconos=true
+            f_navbar=true f_manuales=false ;;
+        "NAVBAR Y PAQUETES")
+            f_config=true f_apps=true f_scripts=false f_autostart=false f_iconos=true
+            f_navbar=true f_manuales=true ;;
+        "AUTOSTARTS")
+            f_config=false f_apps=true f_scripts=true f_autostart=true f_iconos=false
+            f_navbar=false f_manuales=false ;;
+        "OTROS")
+            f_config=true f_apps=true f_scripts=true f_autostart=true f_iconos=true
+            f_navbar=false f_manuales=true ;;
+        "Personalizar")
+            # ── 3) Checkboxes para ajuste fino ──────────────────────────
+            local estado=()
+            local i
+            for i in "${!secciones[@]}"; do
+                estado+=("TRUE" "${secciones[$i]}" "${descripciones[$i]}")
+            done
+            while true; do
+                que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
+                    --text="Ajusta las casillas y pulsa <b>Aceptar</b>." \
+                    --column="" --column="Sección" --column="Qué guarda" \
+                    --separator="@" \
+                    --extra-button="Volver" \
+                    --extra-button="Seleccionar todo" \
+                    --extra-button="Deseleccionar todo" \
+                    --width=860 --height=520 "${estado[@]}" 2>/dev/null)
+                eleccion=$?
+                [ "$eleccion" = "255" ] && return 0
+                [ "$eleccion" = "0" ] && break
                 case "$que" in
-                    "TODO")
-                        for i in "${!secciones[@]}"; do estado[$((i*3))]="TRUE"; done ;;
-                    "NAVBAR")
-                        for i in "${!secciones[@]}"; do
-                            case "${secciones[$i]}" in
-                                "Configuración del dock"|"Lanzadores del dock"|"Apps personalizadas"|"Iconos personalizados"|"Paquetes del navbar")
-                                    estado[$((i*3))]="TRUE" ;;
-                                *)  estado[$((i*3))]="FALSE" ;;
-                            esac
-                        done ;;
-                    "NAVBAR Y PAQUETES")
-                        for i in "${!secciones[@]}"; do
-                            case "${secciones[$i]}" in
-                                "Configuración del dock"|"Lanzadores del dock"|"Apps personalizadas"|"Iconos personalizados"|"Paquetes del navbar"|"Paquetes manuales"|"Repositorios apt")
-                                    estado[$((i*3))]="TRUE" ;;
-                                *)  estado[$((i*3))]="FALSE" ;;
-                            esac
-                        done ;;
-                    "AUTOSTARTS")
-                        for i in "${!secciones[@]}"; do
-                            case "${secciones[$i]}" in
-                                "Apps personalizadas"|"Scripts"|"Autostart")
-                                    estado[$((i*3))]="TRUE" ;;
-                                *)  estado[$((i*3))]="FALSE" ;;
-                            esac
-                        done ;;
-                    "OTROS")
-                        for i in "${!secciones[@]}"; do
-                            case "${secciones[$i]}" in
-                                "Paquetes del navbar")
-                                    estado[$((i*3))]="FALSE" ;;
-                                *)  estado[$((i*3))]="TRUE" ;;
-                            esac
-                        done ;;
-                    "Seleccionar todo")
-                        for i in "${!secciones[@]}"; do estado[$((i*3))]="TRUE"; done ;;
-                    "Deseleccionar todo")
-                        for i in "${!secciones[@]}"; do estado[$((i*3))]="FALSE"; done ;;
+                    "Volver")               break 2 ;;  # volver a los presets
+                    "Seleccionar todo")     for i in "${!secciones[@]}"; do estado[$((i*3))]="TRUE"; done ;;
+                    "Deseleccionar todo")   for i in "${!secciones[@]}"; do estado[$((i*3))]="FALSE"; done ;;
                     *) return 0 ;;
                 esac
-                ;;
-        esac
-    done
+            done
 
-    # ── Interpretar las casillas ──────────────────────────────────────────
-    f_config=true f_apps=true f_scripts=true f_autostart=true f_iconos=true
-    f_navbar=true f_manuales=true
+            # ── 4) Interpretar las casillas ───────────────────────────────
+            f_config=true f_apps=true f_scripts=true f_autostart=true f_iconos=true
+            f_navbar=true f_manuales=true
 
-    local sec
-    for sec in "${secciones[@]}"; do
-        case "$que" in
-            *"$sec"*) ;;  # está marcada
-            *)
-                case "$sec" in
-                    "Configuración del dock")  f_config=false ;;
-                    "Lanzadores del dock")     f_apps=false ;;
-                    "Apps personalizadas")     f_apps=false ;;
-                    "Scripts")                 f_scripts=false ;;
-                    "Autostart")               f_autostart=false ;;
-                    "Iconos personalizados")   f_iconos=false ;;
-                    "Paquetes del navbar")     f_navbar=false ;;
-                    "Paquetes manuales")       f_manuales=false ;;
-                    "Repositorios apt")        f_navbar=false; f_manuales=false ;;
-                    "Script instalar.sh")      f_scripts=false ;;
+            local sec
+            for sec in "${secciones[@]}"; do
+                case "$que" in
+                    *"$sec"*) ;;  # está marcada
+                    *)
+                        case "$sec" in
+                            "Configuración del dock")  f_config=false ;;
+                            "Lanzadores del dock")     f_apps=false ;;
+                            "Apps personalizadas")     f_apps=false ;;
+                            "Scripts")                 f_scripts=false ;;
+                            "Autostart")               f_autostart=false ;;
+                            "Iconos personalizados")   f_iconos=false ;;
+                            "Paquetes del navbar")     f_navbar=false ;;
+                            "Paquetes manuales")       f_manuales=false ;;
+                            "Repositorios apt")        f_navbar=false; f_manuales=false ;;
+                            "Script instalar.sh")      f_scripts=false ;;
+                        esac
+                        ;;
                 esac
-                ;;
-        esac
-    done
+            done
+            ;;
+        *) return 0 ;;
+    esac
 
-    # ── Carpeta destino ───────────────────────────────────────────────────
+    # ── 5) Carpeta destino ────────────────────────────────────────────────
     carpeta=$("${ZEN[@]}" --file-selection --directory \
         --title="¿Dónde guardar el respaldo?" \
         --filename="$HOME/" 2>/dev/null)
