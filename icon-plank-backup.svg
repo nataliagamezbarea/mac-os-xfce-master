@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Icono de "Respaldo": una flecha que baja a una bandeja.
+     Mismo dibujo que los PNG, por si algun sitio de este PC si sabe pintar
+     SVG (aqui no hay cargador de SVG, y por eso el dock usa los PNG).
+     Verde, no azul: al lado de "Anadir a Plank" (que ya es azul) se
+     confundian. Cuadrado redondeado, como el resto de iconos del dock: dentro va todo
+     relleno y solo las esquinas de fuera del redondeo son transparentes.
+     SVG 1.1 valido: nada de rgba(), que los renderizadores antiguos
+     ignoraban y dejaban el icono a medias. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#5fe3a1"/>
+      <stop offset="100%" stop-color="#128a5e"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="128" height="128" rx="29" ry="29" fill="url(#fondo)"/>
+  <rect x="9" y="9" width="110" height="110" rx="21" ry="21" fill="none"
+        stroke="#ffffff" stroke-opacity="0.55" stroke-width="2"/>
+
+  <!-- flecha que baja -->
+  <path d="M64 30 v33" fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round"/>
+  <path d="M47 53 L64 70 L81 53" fill="none" stroke="#ffffff" stroke-width="11"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- bandeja donde cae -->
+  <path d="M34 93 h60" fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round"/>
+</svg>

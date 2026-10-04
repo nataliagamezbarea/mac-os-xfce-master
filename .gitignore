@@ -1,0 +1,11 @@
+# Script local de escritorio — no versionar
+toggle-sql.sh
+
+# Docker — no versionar
+Dockerfile
+docker-compose.yml
+docker-compose.yaml
+docker-compose.*.yml
+docker-compose.*.yaml
+.docker/
+.dockerignore
