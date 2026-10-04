@@ -1361,35 +1361,45 @@ salvar_artefactos_origen() {
 plank_exportar() {
     local carpeta que eleccion
     local secciones=(
-        "Configuración del dock|dconf, temas y orden de los iconos"
-        "Lanzadores del dock|.desktop, iconos y ejecutables de cada app anclada"
-        "Apps personalizadas|~/.local/share/applications (Safari→Brave, …)"
-        "Scripts|~/.local/bin"
-        "Autostart|~/.config/autostart"
-        "Iconos personalizados|~/.icons/custom"
-        "Paquetes del navbar|lista de paquetes de las apps ancladas al dock"
-        "Paquetes manuales|lista de TODOS los paquetes que instalaste a mano"
-        "Repositorios apt|sources.list.d y keyrings para instalar.sh"
-        "Script instalar.sh|para reinstalar los paquetes en otro PC"
+        "Configuración del dock"
+        "Lanzadores del dock"
+        "Apps personalizadas"
+        "Scripts"
+        "Autostart"
+        "Iconos personalizados"
+        "Paquetes del navbar"
+        "Paquetes manuales"
+        "Repositorios apt"
+        "Script instalar.sh"
+    )
+    local descripciones=(
+        "dconf, temas y orden de los iconos"
+        ".desktop, iconos y ejecutables de cada app anclada"
+        "~/.local/share/applications (Safari→Brave, …)"
+        "~/.local/bin"
+        "~/.config/autostart"
+        "~/.icons/custom"
+        "lista de paquetes de las apps ancladas al dock"
+        "lista de TODOS los paquetes que instalaste a mano"
+        "sources.list.d y keyrings para instalar.sh"
+        "para reinstalar los paquetes en otro PC"
     )
 
     # Estado de las casillas: todo marcado por defecto
     local estado=()
     local i
     for i in "${!secciones[@]}"; do
-        estado+=("TRUE" "${secciones[$i]}")
+        estado+=("TRUE" "${secciones[$i]}" "${descripciones[$i]}")
     done
 
     # ── Una sola ventana: presets arriba + checkboxes + Aceptar/Cancelar ──
-    # Los presets (TODO, NAVBAR, etc.) van como botones extra ARRIBA.
-    # Los checkboxes aparecen directamente, sin pulsar nada.
-    # Al pulsar un preset solo cambia las casillas y vuelve a la ventana.
+    # Los presets van como botones extra. Los checkboxes aparecen directo.
     while true; do
         que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
             --text="Pulsa un <b>preset</b> para marcar las casillas, o ajusta
 las casillas y pulsa <b>Aceptar</b>." \
             --column="" --column="Sección" --column="Qué guarda" \
-            --separator="|" \
+            --separator="@" \
             --extra-button="TODO" \
             --extra-button="NAVBAR" \
             --extra-button="NAVBAR Y PAQUETES" \
@@ -1405,43 +1415,43 @@ las casillas y pulsa <b>Aceptar</b>." \
             *)
                 case "$que" in
                     "TODO")
-                        for i in "${!secciones[@]}"; do estado[$((i*2))]="TRUE"; done ;;
+                        for i in "${!secciones[@]}"; do estado[$((i*3))]="TRUE"; done ;;
                     "NAVBAR")
                         for i in "${!secciones[@]}"; do
                             case "${secciones[$i]}" in
-                                "Configuración del dock"*|"Lanzadores del dock"*|"Apps personalizadas"*|"Iconos personalizados"*|"Paquetes del navbar"*)
-                                    estado[$((i*2))]="TRUE" ;;
-                                *)  estado[$((i*2))]="FALSE" ;;
+                                "Configuración del dock"|"Lanzadores del dock"|"Apps personalizadas"|"Iconos personalizados"|"Paquetes del navbar")
+                                    estado[$((i*3))]="TRUE" ;;
+                                *)  estado[$((i*3))]="FALSE" ;;
                             esac
                         done ;;
                     "NAVBAR Y PAQUETES")
                         for i in "${!secciones[@]}"; do
                             case "${secciones[$i]}" in
-                                "Configuración del dock"*|"Lanzadores del dock"*|"Apps personalizadas"*|"Iconos personalizados"*|"Paquetes del navbar"*|"Paquetes manuales"*|"Repositorios apt"*)
-                                    estado[$((i*2))]="TRUE" ;;
-                                *)  estado[$((i*2))]="FALSE" ;;
+                                "Configuración del dock"|"Lanzadores del dock"|"Apps personalizadas"|"Iconos personalizados"|"Paquetes del navbar"|"Paquetes manuales"|"Repositorios apt")
+                                    estado[$((i*3))]="TRUE" ;;
+                                *)  estado[$((i*3))]="FALSE" ;;
                             esac
                         done ;;
                     "AUTOSTARTS")
                         for i in "${!secciones[@]}"; do
                             case "${secciones[$i]}" in
-                                "Apps personalizadas"*|"Scripts"*|"Autostart"*)
-                                    estado[$((i*2))]="TRUE" ;;
-                                *)  estado[$((i*2))]="FALSE" ;;
+                                "Apps personalizadas"|"Scripts"|"Autostart")
+                                    estado[$((i*3))]="TRUE" ;;
+                                *)  estado[$((i*3))]="FALSE" ;;
                             esac
                         done ;;
                     "OTROS")
                         for i in "${!secciones[@]}"; do
                             case "${secciones[$i]}" in
-                                "Paquetes del navbar"*)
-                                    estado[$((i*2))]="FALSE" ;;
-                                *)  estado[$((i*2))]="TRUE" ;;
+                                "Paquetes del navbar")
+                                    estado[$((i*3))]="FALSE" ;;
+                                *)  estado[$((i*3))]="TRUE" ;;
                             esac
                         done ;;
                     "Seleccionar todo")
-                        for i in "${!secciones[@]}"; do estado[$((i*2))]="TRUE"; done ;;
+                        for i in "${!secciones[@]}"; do estado[$((i*3))]="TRUE"; done ;;
                     "Deseleccionar todo")
-                        for i in "${!secciones[@]}"; do estado[$((i*2))]="FALSE"; done ;;
+                        for i in "${!secciones[@]}"; do estado[$((i*3))]="FALSE"; done ;;
                     *) return 0 ;;
                 esac
                 ;;
@@ -1458,24 +1468,22 @@ las casillas y pulsa <b>Aceptar</b>." \
             *"$sec"*) ;;  # está marcada
             *)
                 case "$sec" in
-                    "Configuración del dock"*)  f_config=false ;;
-                    "Lanzadores del dock"*)     f_apps=false ;;
-                    "Apps personalizadas"*)     f_apps=false ;;
-                    "Scripts"*)                 f_scripts=false ;;
-                    "Autostart"*)               f_autostart=false ;;
-                    "Iconos personalizados"*)   f_iconos=false ;;
-                    "Paquetes del navbar"*)     f_navbar=false ;;
-                    "Paquetes manuales"*)       f_manuales=false ;;
-                    "Repositorios apt"*)        f_navbar=false; f_manuales=false ;;
-                    "Script instalar.sh"*)      f_scripts=false ;;
+                    "Configuración del dock")  f_config=false ;;
+                    "Lanzadores del dock")     f_apps=false ;;
+                    "Apps personalizadas")     f_apps=false ;;
+                    "Scripts")                 f_scripts=false ;;
+                    "Autostart")               f_autostart=false ;;
+                    "Iconos personalizados")   f_iconos=false ;;
+                    "Paquetes del navbar")     f_navbar=false ;;
+                    "Paquetes manuales")       f_manuales=false ;;
+                    "Repositorios apt")        f_navbar=false; f_manuales=false ;;
+                    "Script instalar.sh")      f_scripts=false ;;
                 esac
                 ;;
         esac
     done
 
     # ── Carpeta destino ───────────────────────────────────────────────────
-    # Si el usuario cierra la carpeta, se usa ~/Descargas por defecto
-    # en lugar de desaparecer el respaldo.
     carpeta=$("${ZEN[@]}" --file-selection --directory \
         --title="¿Dónde guardar el respaldo?" \
         --filename="$HOME/" 2>/dev/null)
@@ -1485,7 +1493,7 @@ las casillas y pulsa <b>Aceptar</b>." \
     # ── La copia, con barra de progreso y botón de cancelar ───────────────
     plank_exportar_barra "$carpeta" && return 0
 
-    # Cancelada: preguntar en vez de salir a pelo (antes no había salida).
+    # Cancelada: preguntar en vez de salir a pelo.
     if "${ZEN[@]}" --question --title="Respaldo cancelado" \
          --text="Se paró antes de terminar.\n\n¿Empezar de nuevo?" \
          --ok-label="Empezar de nuevo" --cancel-label="Salir" 2>/dev/null; then
