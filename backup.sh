@@ -1379,12 +1379,13 @@ plank_exportar() {
     que=$("${ZEN[@]}" --list --title="Respaldo" \
         --text="Elige una combinación o <b>Personalizar</b> para ajustar secciones sueltas." \
         --column="Presets" --column="Qué incluye" \
-        "Respaldo TODO" "Todo: dock, lanzadores, scripts, autostart, iconos y TODOS los paquetes" \
-        "Respaldo solo navbar" "Dock + lanzadores + paquetes de las apps ancladas al dock" \
-        "Respaldo autostarts" "Autostart + scripts + apps personalizadas" \
-        "Respaldo otros" "Todo menos los paquetes del navbar" \
+        "TODO" "Todo: dock, lanzadores, scripts, autostart, iconos y TODOS los paquetes" \
+        "NAVBAR" "Dock + lanzadores + paquetes de las apps ancladas al dock" \
+        "NAVBAR Y PAQUETES" "Dock + lanzadores + TODOS los paquetes (navbar y manuales)" \
+        "AUTOSTARTS" "Autostart + scripts + apps personalizadas" \
+        "OTROS" "Todo menos los paquetes del navbar" \
         "Personalizar" "Elige las secciones una a una" \
-        --width=780 --height=380 2>/dev/null)
+        --width=780 --height=420 2>/dev/null)
     [ -z "$que" ] && return 0
 
     # ── 2) Marcar las casillas según el preset ──────────────────────────
@@ -1398,10 +1399,11 @@ plank_exportar() {
         for idx in "$@"; do estado[$((idx*2))]="TRUE"; done
     }
     case "$que" in
-        "Respaldo TODO")        for i in "${!secciones[@]}"; do estado[$((i*2))]="TRUE"; done ;;
-        "Respaldo solo navbar") marcar 0 1 2 5 6 ;;
-        "Respaldo autostarts")  marcar 2 3 4 ;;
-        "Respaldo otros")       for i in "${!secciones[@]}"; do estado[$((i*2))]="TRUE"; done; estado[12]="FALSE" ;;
+        "TODO")                 for i in "${!secciones[@]}"; do estado[$((i*2))]="TRUE"; done ;;
+        "NAVBAR")               marcar 0 1 2 5 6 ;;
+        "NAVBAR Y PAQUETES")    marcar 0 1 2 5 6 7 8 ;;
+        "AUTOSTARTS")           marcar 2 3 4 ;;
+        "OTROS")                for i in "${!secciones[@]}"; do estado[$((i*2))]="TRUE"; done; estado[12]="FALSE" ;;
         "Personalizar")         for i in "${!secciones[@]}"; do estado[$((i*2))]="TRUE"; done ;;
         *) return 0 ;;
     esac
