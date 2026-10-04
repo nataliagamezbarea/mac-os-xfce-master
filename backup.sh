@@ -138,6 +138,15 @@ plank_asegurar_lanzador() {
     local ruta="$HOME/.local/bin/backup.sh"
     [ -f "$ruta" ] || ruta="$DIR/backup.sh"
 
+    # ── 0) MIGRACIÓN: si el .desktop existe con el nombre viejo (plank-backup.sh),
+    #    se actualiza al nuevo (backup.sh). Así el icono del dock sigue funcionando
+    #    tras el renombrado sin tener que hacer nada a mano.
+    local desk_viejo="$HOME/.local/share/applications/plank-backup.desktop"
+    if [ -f "$desk_viejo" ] && grep -q "plank-backup.sh" "$desk_viejo" 2>/dev/null; then
+        sed -i 's|plank-backup\.sh|backup.sh|g' "$desk_viejo" 2>/dev/null
+        cambio=1
+    fi
+
     # ── 1) el .desktop, con el nombre corto ("Respaldo") y el icono bueno ──
     tmp=$(mktemp) || return 0
     cat > "$tmp" <<FIN
