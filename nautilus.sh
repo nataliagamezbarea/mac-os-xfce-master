@@ -1713,13 +1713,17 @@ DESKEOF
     cur=$(dconf read "$_clave" 2>/dev/null | sed 's/^@as //')
     [ -n "$cur" ] || cur="[]"
     if ! printf '%s' "$cur" | grep -q "aaa_anadir-a-plank.dockitem"; then
-        if printf '%s' "$cur" | grep -q "aaa_0-respaldo.dockitem"; then
-            cur="${cur/aaa_0-respaldo.dockitem'/aaa_0-respaldo.dockitem', 'aaa_anadir-a-plank.dockitem'}"
-            cur="${cur/aaa_0-respaldo.dockitem\",/aaa_0-respaldo.dockitem\", 'aaa_anadir-a-plank.dockitem'}"
+        if [ "$cur" = "[]" ]; then
+            cur="['aaa_anadir-a-plank.dockitem']"
+        elif printf '%s' "$cur" | grep -q "aaa_0-respaldo.dockitem"; then
+            cur=$(printf '%s' "$cur" | sed \
+                "s/aaa_0-respaldo\.dockitem'/aaa_0-respaldo.dockitem', 'aaa_anadir-a-plank.dockitem'/")
         else
-            cur="${cur/]/, 'aaa_anadir-a-plank.dockitem']}"
+            cur=$(printf '%s' "$cur" | sed "s/]$/, 'aaa_anadir-a-plank.dockitem']/")
         fi
-        dconf write "$_clave" "$cur" 2>/dev/null || true
+        case "$cur" in
+            "['"*"']") dconf write "$_clave" "$cur" 2>/dev/null || true ;;
+        esac
     fi
 
     # ── config.json: gestor + útiles ────────────────────────

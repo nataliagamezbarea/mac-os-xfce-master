@@ -928,14 +928,34 @@ Categories=Utility;
 DESKEOF
     chmod +x "$desk"
 
-    local dock="$HOME/.config/plank/dock1/launchers/aaa_anadir-a-plank.dockitem"
-    printf '[PlankDockItemPreferences]\nLauncher=file://%s\n' "$desk" > "$dock"
+    local dir_dock="$HOME/.config/plank/dock1/launchers"
+    mkdir -p "$dir_dock"
+    printf '[PlankDockItemPreferences]\nLauncher=file://%s\n' "$desk" \
+        > "$dir_dock/aaa_anadir-a-plank.dockitem"
 
-    # Mover al inicio del dock vía dconf
+    # ── En el dock, justo a la DERECHA de "Respaldo" ─────────────────────────
+    # Plank usa el ORDEN de esta lista de dconf. Antes aqui se metia un
+    # corchete de mas ("[[...]]"), que no es una lista de textos y Plank no
+    # sabe leerla: por eso al instalar el panel el acceso se quedaba fuera
+    # del dock. Ademas se insertaba SIEMPRE por el principio, que es donde
+    # menos se ve.
+    local _clave=/net/launchpad/plank/docks/dock1/dock-items
     local cur
-    cur=$(dconf read /net/launchpad/plank/docks/dock1/dock-items 2>/dev/null || echo "[]")
-    cur=$(echo "$cur" | sed "s/^\[/'aaa_anadir-a-plank.dockitem', /")
-    dconf write /net/launchpad/plank/docks/dock1/dock-items "[$cur]" 2>/dev/null || true
+    cur=$(dconf read "$_clave" 2>/dev/null | sed 's/^@as //')
+    [ -n "$cur" ] || cur="[]"
+    if ! printf '%s' "$cur" | grep -q "aaa_anadir-a-plank.dockitem"; then
+        if [ "$cur" = "[]" ]; then
+            cur="['aaa_anadir-a-plank.dockitem']"
+        elif printf '%s' "$cur" | grep -q "aaa_0-respaldo.dockitem"; then
+            cur=$(printf '%s' "$cur" | sed \
+                "s/aaa_0-respaldo\.dockitem'/aaa_0-respaldo.dockitem', 'aaa_anadir-a-plank.dockitem'/")
+        else
+            cur=$(printf '%s' "$cur" | sed "s/]$/, 'aaa_anadir-a-plank.dockitem']/")
+        fi
+        case "$cur" in
+            "['"*"']") dconf write "$_clave" "$cur" 2>/dev/null || true ;;
+        esac
+    fi
     info "Añadir a Plank añadido al dock (primera posición)"
 }
 
