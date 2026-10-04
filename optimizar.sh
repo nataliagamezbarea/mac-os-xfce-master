@@ -413,8 +413,13 @@ Name=Xfce Screensaver
 Comment=Bloqueo de pantalla (unico bloqueador)
 Exec=xfce4-screensaver
 Hidden=false
+X-GNOME-Autostart-enabled=true
 EOF
         xfconf-query -c xfce4-session -p /general/LockCommand -s "xfce4-screensaver-command --lock" 2>/dev/null || true
+        # ps + grep, no pgrep -x: el nombre se corta a 15 chars y pgrep
+        # nunca lo encuentra (lanza un bloqueador duplicado).
+        ps -eo args= 2>/dev/null | grep -q '[x]fce4-screensaver' || \
+            { setsid xfce4-screensaver >/dev/null 2>&1 & }
         info "Bloqueo: xfce4-screensaver (lock fiable)"
     else
         # Fallback: solo systemd-logind para lock
@@ -429,6 +434,7 @@ Type=Application
 Name=Light-locker
 Exec=light-locker
 Hidden=true
+X-GNOME-Autostart-enabled=false
 EOF
         pkill -x light-locker 2>/dev/null || true
         info "light-locker desactivado (evita doble bloqueo)"
@@ -467,7 +473,11 @@ case "$1/$2" in
 
         # 3. Asegurar xfce4-screensaver vivo (bloqueo actual); si murió,
         #    relanzarlo para que el próximo bloqueo funcione bien.
-        if ! sudo -u "$REAL_USER" pgrep -x xfce4-screensaver >/dev/null 2>&1; then
+        # pgrep -x con "xfce4-screensaver" NO encuentra nunca nada: el
+        # nombre del proceso se corta a 15 caracteres (xfce4-screensav), asi
+        # que esta comprobacion era siempre falsa y lanzaba un segundo
+        # bloqueador en cada ejecucion. Con ps + grep si se ve.
+        if ! sudo -u "$REAL_USER" ps -eo args= 2>/dev/null | grep -q '[x]fce4-screensaver'; then
             sudo -u "$REAL_USER" xfce4-screensaver >/dev/null 2>&1 &
         fi
 

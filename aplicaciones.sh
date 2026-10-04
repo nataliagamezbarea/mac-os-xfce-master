@@ -110,22 +110,32 @@ aplicaciones_autostart() {
         apt_silencioso install blueman 2>/dev/null || true
     fi
 
-    # ── SIN BLOQUEO: entrar directo al escritorio, sin desbloquear ────────
-    # Ni xfce4-screensaver ni light-locker: el usuario quiere entrar directo
-    # al escritorio al iniciar sesión, no una pantalla de desbloqueo.
-    # Ambos se desactivan en ~/.config/autostart (user_override) con todas
-    # las claves necesarias para que ni XFCE ni GNOME los arranquen.
+    # ── Pantalla de bloqueo: la del inicio (xfce4-screensaver) ─────────────
+    # El bloqueador es el que ya arranca con la sesion: xfce4-screensaver.
+    # light-locker se queda FUERA: pinta su propia ventana clara y se cuela
+    # al bloquear (tapa, Super+L), que es de donde salia "el light".
+    #
+    # Antes aqui se desactivaban los DOS y optimizar.sh volvia a activar
+    # xfce4-screensaver: los dos scripts escribian el mismo .desktop con
+    # claves opuestas (Hidden=false junto a X-GNOME-Autostart-enabled=false) y
+    # ganaba el ultimo en ejecutarse. Ahora los dos escriben lo mismo, con
+    # Hidden y la clave de GNOME de acuerdo.
     if command -v xfce4-screensaver &>/dev/null || [ -f /etc/xdg/autostart/xfce4-screensaver.desktop ]; then
         cat > ~/.config/autostart/xfce4-screensaver.desktop << 'EOF'
 [Desktop Entry]
 Type=Application
 Name=Xfce Screensaver
+Comment=Bloqueo de pantalla (unico bloqueador)
 Exec=xfce4-screensaver
-Hidden=true
-X-GNOME-Autostart-enabled=false
+Hidden=false
+X-GNOME-Autostart-enabled=true
 EOF
-        pkill -x xfce4-screensaver 2>/dev/null || true
-        info "xfce4-screensaver desactivado (sin bloqueo de pantalla)"
+        xfconf-query -c xfce4-session -p /general/LockCommand -s "xfce4-screensaver-command --lock" 2>/dev/null || true
+        # ps + grep, no pgrep -x: el nombre se corta a 15 chars y pgrep
+        # nunca lo encuentra (lanza un bloqueador duplicado).
+        ps -eo args= 2>/dev/null | grep -q '[x]fce4-screensaver' || \
+            { setsid xfce4-screensaver >/dev/null 2>&1 & }
+        info "Bloqueo: xfce4-screensaver (el del inicio)"
     fi
     if command -v light-locker &>/dev/null || [ -f /etc/xdg/autostart/light-locker.desktop ]; then
         cat > ~/.config/autostart/light-locker.desktop << 'EOF'
@@ -137,7 +147,7 @@ Hidden=true
 X-GNOME-Autostart-enabled=false
 EOF
         pkill -x light-locker 2>/dev/null || true
-        info "light-locker desactivado (sin bloqueo de pantalla)"
+        info "light-locker desactivado (no es el bloqueador)"
     fi
 
     # ── Plank: MÁXIMA prioridad en el arranque (INMEDIATO, antes de red) ──
