@@ -1351,51 +1351,101 @@ salvar_artefactos_origen() {
 
 plank_exportar() {
     local carpeta que eleccion todo
+    local secciones=(
+        "Configuración del dock:dconf, temas y orden de los iconos"
+        "Lanzadores del dock:.desktop, iconos y ejecutables de cada app anclada"
+        "Apps personalizadas:~/.local/share/applications (Safari→Brave, …)"
+        "Scripts:~/.local/bin"
+        "Autostart:~/.config/autostart"
+        "Iconos personalizados:~/.icons/custom"
+        "Paquetes del navbar:lista de paquetes de las apps ancladas al dock"
+        "Paquetes manuales:lista de TODOS los paquetes que instalaste a mano"
+        "Repositorios apt:sources.list.d y keyrings para instalar.sh"
+        "Script instalar.sh:para reinstalar los paquetes en otro PC"
+    )
+    local todas=() ninguna=()
+    local i
+    for i in "${!secciones[@]}"; do
+        todas+=("TRUE" "${secciones[$i]}")
+        ninguna+=("FALSE" "${secciones[$i]}")
+    done
 
     while true; do
-        # ── 1) La pregunta directa ─────────────────────────────────────────
-        # Va PRIMERO y de frente: respaldar todo es lo que se quiere casi
-        # siempre, así que no hay que leer una lista para llegar ahí.
-        "${ZEN[@]}" --question --title="Respaldo" \
-            --text="¿Quieres respaldar <b>TODO</b>?\n\nSe guardará la configuración del dock, todos tus lanzadores con\nsus .desktop e iconos, tus scripts, el autostart y las listas de\npaquetes para poder reinstalarlo todo en otro ordenador." \
-            --ok-label="Sí, respaldar todo" \
-            --cancel-label="No, elegir qué" \
-            --extra-button="Cancelar" --width=650 --height=290 2>/dev/null
+        # ── Selección por secciones: TODO marcado por defecto ────────────
+        # Una sola pantalla con todas las secciones marcadas. El usuario pulsa
+        # Aceptar para respaldar todo, o desmarca lo que no quiera. Sin pasos
+        # extra: nada de "¿TODO?" seguido de "¿qué quieres?".
+        que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
+            --text="Todas las secciones vienen marcadas. Pulsa <b>Aceptar</b> para\nrespaldar todo, o desmarca lo que no necesites." \
+            --column="" --column="Sección" --column="Qué guarda" \
+            --separator="|" \
+            --extra-button="Seleccionar todo" \
+            --extra-button="Deseleccionar todo" \
+            --extra-button="Cancelar" \
+            --width=820 --height=480 2>/dev/null)
         eleccion=$?
         case "$eleccion" in
-            0)   f_navbar=true  f_manuales=true ;;   # Sí, respaldar todo
-            255) return 0 ;;                          # Cancelar
-            *)   f_navbar=false f_manuales=false ;;   # No, elegir qué
+            0) break ;;                        # Aceptar
+            255) return 0 ;;                   # Cerrar ventana
+            *)                                 # Botón extra
+                case "$que" in
+                    "Seleccionar todo")    que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
+                        --text="Todas las secciones vienen marcadas. Pulsa <b>Aceptar</b> para\nrespaldar todo, o desmarca lo que no necesites." \
+                        --column="" --column="Sección" --column="Qué guarda" \
+                        --separator="|" \
+                        --extra-button="Seleccionar todo" \
+                        --extra-button="Deseleccionar todo" \
+                        --extra-button="Cancelar" \
+                        --width=820 --height=480 "${todas[@]}" 2>/dev/null) ;;
+                    "Deseleccionar todo")  que=$("${ZEN[@]}" --list --checklist --title="Respaldo" \
+                        --text="Todas las secciones vienen marcadas. Pulsa <b>Aceptar</b> para\nrespaldar todo, o desmarca lo que no necesites." \
+                        --column="" --column="Sección" --column="Qué guarda" \
+                        --separator="|" \
+                        --extra-button="Seleccionar todo" \
+                        --extra-button="Deseleccionar todo" \
+                        --extra-button="Cancelar" \
+                        --width=820 --height=480 "${ninguna[@]}" 2>/dev/null) ;;
+                    *) return 0 ;;             # Cancelar
+                esac
+                ;;
         esac
+    done
 
-        if [ "$eleccion" != "0" ] && [ "$eleccion" != "255" ]; then
-            # ── 2) Las tres opciones, con "Volver" para rectificar ──────────
-            que=$("${ZEN[@]}" --list --title="Respaldo" \
-                --text="¿Qué quieres respaldar? Puedes volver atrás si te has equivocado." \
-                --column="Opción" --column="Qué guarda" \
-                "Todo" "Config, lanzadores, scripts, iconos + TODOS los paquetes manuales y los del navbar" \
-                "Solo los paquetes" "Lo mismo pero solo la lista de TODOS los paquetes que instalaste a mano" \
-                "Navbar + solo paquetes de navbar" "Lo mismo pero solo los paquetes de las apps ancladas al dock" \
-                --extra-button="Volver" \
-                --width=820 --height=380 2>/dev/null)
-            [ -z "$que" ] && return 0
-            case "$que" in
-                "Todo")                                     f_navbar=true  f_manuales=true ;;
-                "Solo los paquetes")                        f_navbar=false f_manuales=true ;;
-                "Navbar + solo paquetes de navbar")         f_navbar=true  f_manuales=false ;;
-                *) f_navbar=false f_manuales=false; continue ;;   # "Volver"
-            esac
-        fi
+    # ── Interpretar la selección ──────────────────────────────────────────
+    # Todo marcado por defecto: si se pulsa Aceptar sin tocar nada, se respalda todo
+    f_config=true f_apps=true f_scripts=true f_autostart=true f_iconos=true
+    f_navbar=true f_manuales=true
 
-        # ── Carpeta destino. Se pregunta DESPUÉS de qué respaldar, para no
-        #    tener que repetirla si hay que rectificar. ────────────────────
-        carpeta=$("${ZEN[@]}" --file-selection --directory \
-            --title="¿Dónde guardar el respaldo?" \
-            --filename="$HOME/" 2>/dev/null)
-        [ -z "$carpeta" ] && return 0
+    # Desmarcar lo que el usuario haya quitado
+    local sec
+    for sec in "${secciones[@]}"; do
+        case "$que" in
+            *"$sec"*) ;;  # está marcada
+            *)  # desmarcar según qué sección es
+                case "$sec" in
+                    "Configuración del dock"*)  f_config=false ;;
+                    "Lanzadores del dock"*)     f_apps=false ;;
+                    "Apps personalizadas"*)     f_apps=false ;;
+                    "Scripts"*)                 f_scripts=false ;;
+                    "Autostart"*)               f_autostart=false ;;
+                    "Iconos personalizados"*)   f_iconos=false ;;
+                    "Paquetes del navbar"*)     f_navbar=false ;;
+                    "Paquetes manuales"*)       f_manuales=false ;;
+                    "Repositorios apt"*)        f_navbar=false; f_manuales=false ;;
+                    "Script instalar.sh"*)      f_scripts=false ;;
+                esac
+                ;;
+        esac
+    done
 
-        # ── 3) La copia, con barra de progreso y botón de cancelar ─────────
-        plank_exportar_barra "$carpeta" && return 0
+    # ── Carpeta destino ───────────────────────────────────────────────────
+    carpeta=$("${ZEN[@]}" --file-selection --directory \
+        --title="¿Dónde guardar el respaldo?" \
+        --filename="$HOME/" 2>/dev/null)
+    [ -z "$carpeta" ] && return 0
+
+    # ── La copia, con barra de progreso y botón de cancelar ───────────────
+    plank_exportar_barra "$carpeta" && return 0
 
         # Cancelada: preguntar en vez de salir a pelo (antes no había salida).
         if "${ZEN[@]}" --question --title="Respaldo cancelado" \
