@@ -630,6 +630,29 @@ def get_fallback():
     try: return Gtk.IconTheme.get_default().load_icon("application-x-executable", 48, 0)
     except: return None
 
+# El lanzador del propio "Respaldo" y el de "Anadir a Plank" NO se ofrecen:
+# los dos ya estan anclados en el dock, asi que no aportan nada. El de
+# Respaldo salia ademas el primero de la lista y sin icono util.
+NO_OFRECER = {"plank-backup.desktop", "anadir-a-plank.desktop"}
+
+def anadir_al_dock(nombre_item):
+    """Mete el .dockitem en la lista de Plank (dconf).
+
+    Plank BORRA los .dockitem que no estan en esa lista: sin esto, el icono se
+    anade y desaparece acto seguido (es decir: no se anade nunca).
+    """
+    clave = "/net/launchpad/plank/docks/dock1/dock-items"
+    try:
+        cur = subprocess.run(["dconf", "read", clave],
+                             capture_output=True, text=True).stdout.strip()
+    except Exception:
+        return
+    if cur.startswith("@as "): cur = cur[4:]
+    if not cur or cur == "[]": cur = "[]"
+    if nombre_item in cur: return
+    nueva = f"['{nombre_item}']" if cur == "[]" else cur[:-1] + f", '{nombre_item}']"
+    subprocess.run(["dconf", "write", clave, nueva], check=False)
+
 def scan_apps():
     apps, seen = [], set()
     fb = get_fallback()
@@ -637,6 +660,7 @@ def scan_apps():
         if not os.path.isdir(d): continue
         for fname in sorted(os.listdir(d)):
             if not fname.endswith(".desktop") or fname in seen: continue
+            if fname in NO_OFRECER: continue
             seen.add(fname)
             name = exec_cmd = icon = ""; nodisplay = terminal = False
             with open(os.path.join(d, fname), errors="ignore") as f:
@@ -755,10 +779,15 @@ class AddWindow(Gtk.Window):
             lbl = Gtk.Label(label=name)
             lbl.set_ellipsize(3)
             lbl.set_max_width_chars(12)
+            # Una sola linea: si el nombre ocupaba dos, los botones salian de
+            # alturas distintas y los iconos quedaban descuadrados.
+            lbl.set_lines(1)
             lbl.set_xalign(0.5)
             inner.pack_start(lbl, False, False, 0)
             btn.add(inner)
             btn.set_relief(Gtk.ReliefStyle.NONE)
+            # Celda de tamano fijo: todos los iconos igual de grandes.
+            btn.set_size_request(84, 84)
             btn._app = (name, cmd, icon)
             btn.connect("clicked", self._on_flow_btn)
             self.flow.add(btn)
@@ -808,7 +837,9 @@ class AddWindow(Gtk.Window):
         os.makedirs(PLANK_DIR, exist_ok=True)
         with open(os.path.join(PLANK_DIR, f"{slug}.dockitem"), "w") as f:
             f.write(f"[PlankDockItemPreferences]\nLauncher=file://{desk}\n")
+        anadir_al_dock(f"{slug}.dockitem")
         self.destroy()
+        Gtk.main_quit()
 
 if __name__ == "__main__":
     AddWindow(scan_apps())

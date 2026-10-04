@@ -1305,6 +1305,29 @@ def get_fallback():
     try: return Gtk.IconTheme.get_default().load_icon("application-x-executable", 48, 0)
     except: return None
 
+# El lanzador del propio "Respaldo" y el de "Anadir a Plank" NO se ofrecen:
+# los dos ya estan anclados en el dock, asi que no aportan nada. El de
+# Respaldo salia ademas el primero de la lista y sin icono util.
+NO_OFRECER = {"plank-backup.desktop", "anadir-a-plank.desktop"}
+
+def anadir_al_dock(nombre_item):
+    """Mete el .dockitem en la lista de Plank (dconf).
+
+    Plank BORRA los .dockitem que no estan en esa lista: sin esto, el icono se
+    anade y desaparece acto seguido (es decir: no se anade nunca).
+    """
+    clave = "/net/launchpad/plank/docks/dock1/dock-items"
+    try:
+        cur = subprocess.run(["dconf", "read", clave],
+                             capture_output=True, text=True).stdout.strip()
+    except Exception:
+        return
+    if cur.startswith("@as "): cur = cur[4:]
+    if not cur or cur == "[]": cur = "[]"
+    if nombre_item in cur: return
+    nueva = f"['{nombre_item}']" if cur == "[]" else cur[:-1] + f", '{nombre_item}']"
+    subprocess.run(["dconf", "write", clave, nueva], check=False)
+
 def scan_apps():
     apps, seen = [], set()
     fb = get_fallback()
@@ -1312,6 +1335,7 @@ def scan_apps():
         if not os.path.isdir(d): continue
         for fname in sorted(os.listdir(d)):
             if not fname.endswith(".desktop") or fname in seen: continue
+            if fname in NO_OFRECER: continue
             seen.add(fname)
             name = exec_cmd = icon = ""; nodisplay = terminal = False
             with open(os.path.join(d, fname), errors="ignore") as f:
@@ -1430,10 +1454,15 @@ class AddWindow(Gtk.Window):
             lbl = Gtk.Label(label=name)
             lbl.set_ellipsize(3)
             lbl.set_max_width_chars(12)
+            # Una sola linea: si el nombre ocupaba dos, los botones salian de
+            # alturas distintas y los iconos quedaban descuadrados.
+            lbl.set_lines(1)
             lbl.set_xalign(0.5)
             inner.pack_start(lbl, False, False, 0)
             btn.add(inner)
             btn.set_relief(Gtk.ReliefStyle.NONE)
+            # Celda de tamano fijo: todos los iconos igual de grandes.
+            btn.set_size_request(84, 84)
             btn._app = (name, cmd, icon)
             btn.connect("clicked", self._on_flow_btn)
             self.flow.add(btn)
@@ -1483,7 +1512,9 @@ class AddWindow(Gtk.Window):
         os.makedirs(PLANK_DIR, exist_ok=True)
         with open(os.path.join(PLANK_DIR, f"{slug}.dockitem"), "w") as f:
             f.write(f"[PlankDockItemPreferences]\nLauncher=file://{desk}\n")
+        anadir_al_dock(f"{slug}.dockitem")
         self.destroy()
+        Gtk.main_quit()
 
 if __name__ == "__main__":
     AddWindow(scan_apps())
@@ -1639,7 +1670,13 @@ Name=Plank
 Icon=list-add
 Type=Directory
 DIREOF
-    cat > "$HOME/.local/share/applications/anadir-a-plank.desktop" << 'DESKEOF'
+    # OJO: heredoc SIN comillas, a proposito, para que $HOME se expanda.
+    # Con << 'DESKEOF' el $HOME sale LITERAL en el .desktop, y entonces:
+    #   • el Icon no existe -> el icono sale vacio,
+    #   • el Exec no arranca -> hay que abrir la app a mano,
+    #   • el Launcher=file://$HOME/... no lo resuelve Plank -> borra el
+    #     .dockitem y el acceso desaparece del dock.
+    cat > "$HOME/.local/share/applications/anadir-a-plank.desktop" << DESKEOF
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -1652,22 +1689,33 @@ Categories=Utility;
 NoDisplay=false
 DESKEOF
     chmod +x "$HOME/.local/share/applications/anadir-a-plank.desktop"
+    command -v update-desktop-database >/dev/null 2>&1 && \
+        update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1
 
-    local dock="$HOME/.config/plank/dock1/launchers/aaa_anadir-a-plank.dockitem"
-    cat > "$dock" << 'DOCKEOF'
-[PlankDockItemPreferences]
-Launcher=file://$HOME/.local/share/applications/anadir-a-plank.desktop
-DOCKEOF
+    local dir_dock="$HOME/.config/plank/dock1/launchers"
+    mkdir -p "$dir_dock"
+    printf '[PlankDockItemPreferences]\nLauncher=file://%s\n' \
+        "$HOME/.local/share/applications/anadir-a-plank.desktop" \
+        > "$dir_dock/aaa_anadir-a-plank.dockitem"
 
+    # ── En el dock, justo a la DERECHA de "Respaldo" ─────────────────────────
+    # Plank usa el ORDEN de esta lista de dconf, asi que hay que insertarlo en
+    # su sitio: al final se queda desligado de "Respaldo" y el primero taparia
+    # el acceso a las demas apps. "Respaldo" lleva el prefijo aaa_0_ justamente
+    # para poder ser el primero del dock.
+    local _clave=/net/launchpad/plank/docks/dock1/dock-items
     local cur
-    cur=$(dconf read /net/launchpad/plank/docks/dock1/dock-items 2>/dev/null || echo "[]")
-    cur=$(echo "$cur" | sed 's/^@as //')
-    if [ -z "$cur" ] || [ "$cur" = "[]" ]; then
-        cur="['aaa_anadir-a-plank.dockitem']"
-    elif ! echo "$cur" | grep -q "aaa_anadir-a-plank.dockitem"; then
-        cur=$(echo "$cur" | sed "s/^\[/['aaa_anadir-a-plank.dockitem', /")
+    cur=$(dconf read "$_clave" 2>/dev/null | sed 's/^@as //')
+    [ -n "$cur" ] || cur="[]"
+    if ! printf '%s' "$cur" | grep -q "aaa_anadir-a-plank.dockitem"; then
+        if printf '%s' "$cur" | grep -q "aaa_0-respaldo.dockitem"; then
+            cur="${cur/aaa_0-respaldo.dockitem'/aaa_0-respaldo.dockitem', 'aaa_anadir-a-plank.dockitem'}"
+            cur="${cur/aaa_0-respaldo.dockitem\",/aaa_0-respaldo.dockitem\", 'aaa_anadir-a-plank.dockitem'}"
+        else
+            cur="${cur/]/, 'aaa_anadir-a-plank.dockitem']}"
+        fi
+        dconf write "$_clave" "$cur" 2>/dev/null || true
     fi
-    dconf write /net/launchpad/plank/docks/dock1/dock-items "$cur" 2>/dev/null || true
 
     # ── config.json: gestor + útiles ────────────────────────
     cat > "$cfg_dir/config.json" << JSONEOF

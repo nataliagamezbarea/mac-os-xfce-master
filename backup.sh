@@ -2056,6 +2056,50 @@ fi
 # Apps portátiles (JetBrains Toolbox, HeidiSQL…): el export guardó su archivo
 # original (tar.gz/AppImage/zip) en "origen/" o su URL. Aquí se extrae/copia
 # en la misma carpeta donde vivía en el PC de origen (mapa.txt).
+# Descomprime una app en la CARPETA y con el NOMBRE que la usaba en el PC de
+# origen, no con el que trae el archivo.
+#
+# POR QUE hace falta esto: los archivos oficiales traen su propia carpeta de
+# nivel superior (idea-2026.2.3/, pycharm-2026.2.3/...), pero el dock apunta a
+# la carpeta con la que se instalo la app:
+#     .../Toolbox/apps/intellij-idea/bin/idea
+# Si se descomprime tal cual, la app vuelve PERO el icono del dock se queda
+# apuntando a una ruta que ya no existe y no abre nada. Por eso se descomprime
+# aparte y se renombra al nombre bueno.
+#
+# Si la carpeta ya existe no se toca: no se pisa una app que ya este puesta.
+extraer_app() {
+    local archivo="$1" destino="$2" nombre="$3"
+    local tmpdir _cuantos _cual
+    [ -f "$archivo" ] || return 1
+    [ -d "$destino/$nombre" ] && return 0
+    tmpdir=$(mktemp -d) || return 1
+    case "$archivo" in
+        *.tar.gz|*.tgz)  tar -xzf "$archivo" -C "$tmpdir" 2>/dev/null ;;
+        *.tar.xz)        tar -xJf "$archivo" -C "$tmpdir" 2>/dev/null ;;
+        *.tar.bz2)       tar -xjf "$archivo" -C "$tmpdir" 2>/dev/null ;;
+        *.tar.zst)       tar --zstd -xf "$archivo" -C "$tmpdir" 2>/dev/null ;;
+        *.zip)           unzip -qo "$archivo" -d "$tmpdir" 2>/dev/null ;;
+        *) rm -rf "$tmpdir"; return 1 ;;
+    esac || { rm -rf "$tmpdir"; return 1; }
+
+    mkdir -p "$destino" 2>/dev/null || { rm -rf "$tmpdir"; return 1; }
+    _cuantos=$(ls -A "$tmpdir" 2>/dev/null | wc -l)
+    _cual=$(ls -A "$tmpdir" 2>/dev/null | head -1)
+    if [ "$_cuantos" = "1" ] && [ -n "$_cual" ]; then
+        if mv "$tmpdir/$_cual" "$destino/$nombre" 2>/dev/null; then
+            [ "$_cual" = "$nombre" ] || echo "       carpeta: $_cual -> $nombre"
+        else
+            cp -r "$tmpdir/$_cual" "$destino/" 2>/dev/null
+        fi
+    else
+        # Venian archivos sueltos, sin carpeta que renombrar: se sueltan tal cual.
+        cp -r "$tmpdir"/. "$destino"/ 2>/dev/null
+    fi
+    rm -rf "$tmpdir"
+    [ -d "$destino/$nombre" ]
+}
+
 if [ -d origen ] && [ -s origen/mapa.txt ]; then
     echo "== Reconstruyendo apps portátiles del respaldo (origen/) =="
     while IFS='|' read -r _tipo _app _fich _cont _v5 _v6 _v7; do
@@ -2081,7 +2125,7 @@ if [ -d origen ] && [ -s origen/mapa.txt ]; then
         # app portátil pequeña que viaja con su carpeta entera (HeidiSQL…)
         _dest="${_fich/#$ORIGEN_HOME/$DEST_HOME}"
         [ -d "origen/apps/$_app" ] || continue
-        mkdir -p "$dest" 2>/dev/null || continue
+        mkdir -p "$_dest" 2>/dev/null || continue
         cp -rn "origen/apps/$_app"/. "$_dest"/ 2>/dev/null || continue
                 ;;
             REINSTALL)
@@ -2102,8 +2146,10 @@ if [ -d origen ] && [ -s origen/mapa.txt ]; then
                 _deb=""
                 [ -f "$_dato" ] && _deb="$_dato"
                 [ -z "$_deb" ] && [ -f "$_cont" ] && _deb="$_cont"
-                [ -z "$_deb" ] && [ -f "$ORIGEN/paquetes/debs/$_dato" ] && _deb="$ORIGEN/paquetes/debs/$_dato"
-                [ -z "$_deb" ] && [ -f "$ORIGEN/$_dato" ] && _deb="$ORIGEN/$_dato"
+                # Como ultima opcion, el .deb que viajo en la propia copia.
+                # Son rutas relativas a este script (esta en paquetes/).
+                [ -z "$_deb" ] && [ -f "debs/$_dato" ] && _deb="$(pwd)/debs/$_dato"
+                [ -z "$_deb" ] && [ -f "origen/$_dato" ] && _deb="$(pwd)/origen/$_dato"
                 if [ -n "$_deb" ]; then
                     echo "instalando $_app (su .deb: $(basename "$_deb"))"
                     if apt-get install -y "$_deb" >/dev/null 2>&1; then
@@ -2175,11 +2221,6 @@ if [ -d origen ] && [ -s origen/mapa.txt ]; then
                     continue
                 fi
                 case "$_archivo" in
-                    *.tar.gz|*.tgz)  tar -xzf "$_archivo" -C "$_dest" 2>/dev/null ;;
-                    *.tar.xz)        tar -xJf "$_archivo" -C "$_dest" 2>/dev/null ;;
-                    *.tar.bz2)       tar -xjf "$_archivo" -C "$_dest" 2>/dev/null ;;
-                    *.tar.zst)       tar --zstd -xf "$_archivo" -C "$_dest" 2>/dev/null ;;
-                    *.zip)           unzip -qo "$_archivo" -d "$_dest" 2>/dev/null ;;
                     *.deb|*.rpm)     (cd "$_dest" && apt-get install -y "./$_archivo") >/dev/null 2>&1
                                     if [ $? -ne 0 ]; then
                                         errores=$((errores+1))
@@ -2187,8 +2228,13 @@ if [ -d origen ] && [ -s origen/mapa.txt ]; then
                                     fi ;;
                     *.AppImage)      cp -f "$_archivo" "$_dest/" 2>/dev/null
                                     chmod +x "$_dest/$_archivo" 2>/dev/null ;;
-                    # Sin extension no se ve que es: casi siempre es un tar.gz.
-                    *)               tar -xzf "$_archivo" -C "$_dest" 2>/dev/null ;;
+                    # El resto son archivos comprimidos: se descomprimen con el
+                    # nombre de carpeta que la app tenia, para que los lanzadores
+                    # del dock sigan encontrando su ejecutable.
+                    *)               if ! extraer_app "$_archivo" "$_dest" "$_app"; then
+                                            errores=$((errores+1))
+                                            echo "ERROR al descomprimir $_app en $_dest/$_app"
+                                        fi ;;
                 esac
                 rm -f "$_archivo" 2>/dev/null
                 instalados=$((instalados+1))
@@ -2220,10 +2266,13 @@ if [ -d origen ] && [ -s origen/mapa.txt ]; then
                     continue
                 fi
                 case "$_archivo" in
-                    *.tar.gz|*.tgz)  tar -xzf "$_archivo" -C "$_dest" 2>/dev/null ;;
-                    *.zip)           unzip -qo "$_archivo" -d "$_dest" 2>/dev/null ;;
                     *.deb)           (cd "$_dest" && apt-get install -y "./$_archivo") >/dev/null 2>&1 ;;
-                    *)               chmod +x "$_archivo" 2>/dev/null ;;
+                    # Igual que en el caso "url": el archivo trae su propia
+                    # carpeta y hay que dejarla con el nombre que la app tenia.
+                    *)               if ! extraer_app "$_archivo" "$_dest" "$_app"; then
+                                            errores=$((errores+1))
+                                            echo "ERROR al descomprimir $_app en $_dest/$_app"
+                                        fi ;;
                 esac
                 [ "${_archivo##*.}" = "AppImage" ] && chmod +x "$_archivo" 2>/dev/null
                 rm -f "$_archivo" 2>/dev/null
@@ -2276,13 +2325,14 @@ if [ -s urls.txt ]; then
                     mkdir -p "$_tgt" 2>/dev/null || { errores=$((errores+1)); echo "ERROR destino: $_tgt"; continue; }
                     echo "extrayendo $_nom  ->  $_tgt/"
                     case "$_nom" in
-                        *.tar.gz|*.tgz)  tar -xzf "$_nom" -C "$_tgt" 2>/dev/null ;;
-                        *.tar.xz)        tar -xJf "$_nom" -C "$_tgt" 2>/dev/null ;;
-                        *.tar.bz2)       tar -xjf "$_nom" -C "$_tgt" 2>/dev/null ;;
-                        *.tar.zst)       tar --zstd -xf "$_nom" -C "$_tgt" 2>/dev/null ;;
-                        *.zip)           unzip -q -o "$_nom" -d "$_tgt" 2>/dev/null ;;
                         *.AppImage)      chmod +x "$_nom" 2>/dev/null; cp -f "$_nom" "$_tgt/" 2>/dev/null ;;
-                        *) continue ;;
+                        # Igual que en mapa.txt: el archivo trae su propia carpeta
+                        # y hay que dejarla con el nombre que tenia en el PC de
+                        # origen, que es el campo 2 de urls.txt.
+                        *)               if ! extraer_app "$_nom" "$_tgt" "$_p"; then
+                                                errores=$((errores+1))
+                                                echo "ERROR al descomprimir $_p en $_tgt/$_p"
+                                            fi ;;
                     esac
                     instalados=$((instalados+1))
                 else
